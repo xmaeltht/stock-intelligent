@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "stock-intelligence.fullname" . }}-market-data
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "stock-intelligence.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pipeline
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.marketData.storage.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.marketData.storage.size }}
+

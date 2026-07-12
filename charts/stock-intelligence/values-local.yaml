@@ -1,0 +1,30 @@
+# Values observed for the current Docker Desktop cluster on 2026-07-12.
+postgresql:
+  storage:
+    storageClassName: standard
+
+marketData:
+  storage:
+    storageClassName: standard
+
+# Match the local Istio Gateway installed from platform/gateway.yaml.
+namespace:
+  labels:
+    gateway-access: maelkloud
+
+gateway:
+  enabled: true
+  parentRef:
+    name: maelkloud-gateway
+    namespace: istio-ingress
+    sectionName: http
+  additionalParentRefs: []
+  hostnames:
+    - stock-intelligence.localhost
+
+networkPolicy:
+  gatewayNamespace: istio-ingress
+
+secrets:
+  existingSecret: stock-intelligence-runtime
+  createPlaceholder: false

@@ -1,0 +1,102 @@
+namespace:
+  create: true
+  name: stock-intelligence
+  labels:
+    app.kubernetes.io/part-of: stock-intelligence
+  istioInjection: false
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: stock-intelligence-frontend
+    tag: dev
+    pullPolicy: IfNotPresent
+  service:
+    port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+backend:
+  replicaCount: 1
+  image:
+    repository: stock-intelligence-backend
+    tag: dev
+    pullPolicy: IfNotPresent
+  service:
+    port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+postgresql:
+  replicaCount: 1
+  image:
+    repository: postgres
+    tag: "17-alpine"
+    pullPolicy: IfNotPresent
+  storage:
+    storageClassName: standard
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+marketData:
+  storage:
+    storageClassName: standard
+    size: 20Gi
+
+config:
+  appEnv: local-kubernetes
+  logLevel: INFO
+
+secrets:
+  # For GitOps, create this Secret out-of-band and set existingSecret.
+  existingSecret: ""
+  createPlaceholder: true
+  postgresUser: stock_app
+  postgresPassword: REPLACE_ME
+  postgresDatabase: stock_intelligence
+
+gateway:
+  enabled: true
+  classNamespace: istio-system
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: istio-gateway
+    namespace: istio-system
+    sectionName: https
+  additionalParentRefs: []
+  hostnames:
+    - stock-intelligence.localhost
+
+networkPolicy:
+  enabled: true
+  gatewayNamespace: istio-system
+
+dailyPipeline:
+  enabled: true
+  schedule: "30 23 * * 1-5"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

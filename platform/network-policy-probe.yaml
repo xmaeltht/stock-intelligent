@@ -1,0 +1,72 @@
+# Verifies the Argo CD Redis NetworkPolicy. Both Jobs should complete successfully:
+# the first only when denied, and the second only when allowed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: netpol-denied-probe
+  namespace: argocd
+spec:
+  ttlSecondsAfterFinished: 120
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        probe: netpol-denied
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: probe
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -c
+            - |
+              if nc -z -w 3 argocd-redis 6379; then
+                echo UNEXPECTED_ALLOWED > /dev/termination-log
+                exit 1
+              fi
+              echo EXPECTED_DENIED > /dev/termination-log
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: netpol-allowed-probe
+  namespace: argocd
+spec:
+  ttlSecondsAfterFinished: 120
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argocd-server
+        probe: netpol-allowed
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: probe
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -c
+            - |
+              if nc -z -w 3 argocd-redis 6379; then
+                echo EXPECTED_ALLOWED > /dev/termination-log
+                exit 0
+              fi
+              echo UNEXPECTED_DENIED > /dev/termination-log
+              exit 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop: ["ALL"]
+

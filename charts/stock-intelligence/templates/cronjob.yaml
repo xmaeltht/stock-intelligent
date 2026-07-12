@@ -1,0 +1,62 @@
+{{- if .Values.dailyPipeline.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "stock-intelligence.fullname" . }}-daily-pipeline
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "stock-intelligence.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pipeline
+spec:
+  schedule: {{ .Values.dailyPipeline.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.dailyPipeline.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.dailyPipeline.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            {{- include "stock-intelligence.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: pipeline
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "stock-intelligence.fullname" . }}-pipeline
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: daily-pipeline
+              image: {{ include "stock-intelligence.backendImage" . }}
+              imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+              command: ["python", "-m", "app.jobs.daily_pipeline"]
+              envFrom:
+                - configMapRef:
+                    name: {{ include "stock-intelligence.fullname" . }}-config
+                - secretRef:
+                    name: {{ include "stock-intelligence.secretName" . }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+                runAsUser: 10001
+                runAsGroup: 10001
+              resources:
+                {{- toYaml .Values.dailyPipeline.resources | nindent 16 }}
+              volumeMounts:
+                - name: market-data
+                  mountPath: /data/market
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: market-data
+              persistentVolumeClaim:
+                claimName: {{ include "stock-intelligence.fullname" . }}-market-data
+            - name: tmp
+              emptyDir: {}
+{{- end }}
+

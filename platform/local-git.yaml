@@ -1,0 +1,182 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stock-git
+  namespace: stock-intelligence
+  labels:
+    app.kubernetes.io/name: stock-git
+    app.kubernetes.io/part-of: stock-intelligence
+    app.kubernetes.io/component: git
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stock-git
+  template:
+    metadata:
+      annotations:
+        stock-intelligence.local/source-revision: "2026-07-12-03"
+      labels:
+        app.kubernetes.io/name: stock-git
+        app.kubernetes.io/part-of: stock-intelligence
+        app.kubernetes.io/component: git
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: install-git-daemon
+          image: alpine/git:2.47.2
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              apk add --no-cache git-daemon
+              cp /usr/libexec/git-core/git-daemon /tools/git-daemon
+              chmod 0555 /tools/git-daemon
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+        - name: initialize-repository
+          image: alpine/git:2.47.2
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              rm -rf /worktree/* /srv/git/*
+              tar -xzf /source/repository.tgz -C /worktree
+              rm -rf /worktree/.git
+              git config --global --add safe.directory /worktree
+              git -C /worktree init -b main
+              git -C /worktree config user.name "Local Stock Git"
+              git -C /worktree config user.email "stock-git@localhost"
+              git -C /worktree add .
+              git -C /worktree commit -m "Local Kubernetes MVP"
+              git clone --bare /worktree /srv/git/stock-intelligence.git
+              touch /srv/git/stock-intelligence.git/git-daemon-export-ok
+              git --git-dir=/srv/git/stock-intelligence.git update-server-info
+          env:
+            - name: HOME
+              value: /tmp
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: source
+              mountPath: /source
+              readOnly: true
+            - name: worktree
+              mountPath: /worktree
+            - name: repository
+              mountPath: /srv/git
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: git-daemon
+          image: alpine/git:2.47.2
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - exec /tools/git-daemon --reuseaddr --base-path=/srv/git --export-all --verbose --listen=0.0.0.0 --port=9418 /srv/git
+          ports:
+            - name: git
+              containerPort: 9418
+          readinessProbe:
+            tcpSocket:
+              port: git
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: git
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              cpu: 100m
+              memory: 96Mi
+          volumeMounts:
+            - name: repository
+              mountPath: /srv/git
+              readOnly: true
+            - name: tools
+              mountPath: /tools
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: source
+          configMap:
+            name: stock-git-source
+        - name: worktree
+          emptyDir: {}
+        - name: repository
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: tools
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stock-git
+  namespace: stock-intelligence
+  labels:
+    app.kubernetes.io/name: stock-git
+    app.kubernetes.io/part-of: stock-intelligence
+spec:
+  selector:
+    app.kubernetes.io/name: stock-git
+  ports:
+    - name: git
+      port: 9418
+      targetPort: git
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: stock-git
+  namespace: stock-intelligence
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: stock-git
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+      ports:
+        - protocol: TCP
+          port: 9418
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443

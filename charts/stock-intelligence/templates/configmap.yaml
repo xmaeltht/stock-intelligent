@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "stock-intelligence.fullname" . }}-config
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "stock-intelligence.labels" . | nindent 4 }}
+data:
+  APP_ENV: {{ .Values.config.appEnv | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  POSTGRES_HOST: {{ include "stock-intelligence.fullname" . }}-postgres
+  POSTGRES_PORT: "5432"
+  BACKEND_URL: http://{{ include "stock-intelligence.fullname" . }}-backend:{{ .Values.backend.service.port }}
+  MARKET_DATA_PATH: /data/market
+
