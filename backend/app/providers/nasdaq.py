@@ -57,16 +57,22 @@ def _quote_from_history(
 class NasdaqProvider:
     def latest_price(self, symbol: str, asset_type: str = "Stock") -> PriceQuote:
         ticker = symbol.upper()
+        # Yahoo's chart endpoint is the most tolerant of concurrent/bulk access
+        # and returns full OHLCV for both stocks and ETFs, so it leads the
+        # fallback chain. api.nasdaq.com blocks datacenter/bulk traffic and
+        # Stooq enforces a daily per-IP download cap, so both are last resorts.
+        sources = (self._yahoo_price, self._nasdaq_price, self._stooq_price)
         if asset_type == "ETF":
+            sources = (self._yahoo_price, self._stooq_price)
+        errors: list[str] = []
+        for source in sources:
             try:
-                return self._yahoo_price(ticker)
-            except Exception:
-                return self._stooq_price(ticker)
-        try:
-            return self._nasdaq_price(ticker)
-        except Exception:
-            # Nasdaq throttles bursts; Stooq keeps full daily OHLC history.
-            return self._stooq_price(ticker)
+                return source(ticker)
+            except Exception as exc:  # noqa: BLE001 - try every source before failing
+                errors.append(f"{source.__name__.lstrip('_')}: {exc}")
+        raise ValueError(
+            f"No daily price history available for {ticker} ({'; '.join(errors)})"
+        )
 
     def _nasdaq_price(self, ticker: str) -> PriceQuote:
         # SEC tickers use dashes for share classes (BRK-B); Nasdaq expects dots.
@@ -135,16 +141,17 @@ class NasdaqProvider:
             headers={"User-Agent": "Mozilla/5.0 StockIntelligence/0.2"},
         )
         payload = None
-        for attempt in range(2):
+        attempts = 3
+        for attempt in range(attempts):
             if attempt:
-                time.sleep(RETRY_DELAY_SECONDS)
+                time.sleep(RETRY_DELAY_SECONDS * attempt)
             YAHOO_LIMITER.wait()
             try:
                 with urlopen(request, timeout=20) as response:  # noqa: S310 - fixed provider URL
                     payload = json.load(response)
                 break
             except HTTPError as error:
-                if error.code not in (429, 503) or attempt == 1:
+                if error.code not in (429, 503) or attempt == attempts - 1:
                     raise
         results = ((payload or {}).get("chart") or {}).get("result") or []
         if not results:
