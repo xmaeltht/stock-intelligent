@@ -31,6 +31,6 @@ kubectl apply --server-side -f "$TMP_DIR/stock-git-source.yaml"
 kubectl apply --server-side -f "$ROOT_DIR/platform/local-git.yaml"
 kubectl rollout restart deployment/stock-git --namespace stock-intelligence
 kubectl rollout status deployment/stock-git --namespace stock-intelligence --timeout=180s
-kubectl apply --server-side --namespace argocd -f "$ROOT_DIR/argocd/application.yaml"
+kubectl apply --server-side --namespace argocd -f "$ROOT_DIR/argocd/application-local.yaml"
 
 echo "Local Git source published. Argo CD will reconcile the new main revision."

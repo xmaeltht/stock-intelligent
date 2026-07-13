@@ -11,6 +11,7 @@ class CompanyRead(BaseModel):
     ticker: str
     name: str
     exchange: str | None
+    asset_type: str
     cik: str | None
     sector: str | None
     industry: str | None
@@ -19,4 +20,3 @@ class CompanyRead(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-

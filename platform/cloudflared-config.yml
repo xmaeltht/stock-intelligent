@@ -1,0 +1,11 @@
+tunnel: 15067bae-75e9-4e4c-8979-14f292618f86
+credentials-file: /Users/mael/.cloudflared/15067bae-75e9-4e4c-8979-14f292618f86.json
+
+ingress:
+  - hostname: stocks.maelkloud.com
+    service: http://localhost:8080
+  - hostname: stock-intelligence.maelkloud.com
+    service: http://localhost:80
+  - hostname: argocd.maelkloud.com
+    service: http://localhost:80
+  - service: http_status:404

@@ -16,6 +16,18 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_version: str = "0.1.0"
     log_level: str = "INFO"
+    sec_user_agent: str = "StockIntelligence/0.2 research@example.com"
+    market_data_path: str = "/data/market"
+    # Leave empty to analyze the complete eligible SEC universe in resumable batches.
+    # A comma-separated value remains available for targeted/manual runs.
+    analysis_symbols: str = ""
+    analysis_batch_size: int = Field(default=500, ge=1, le=10000)
+    analysis_retry_hours: int = Field(default=24, ge=1, le=720)
+    analysis_refresh_hours: int = Field(default=24, ge=1, le=720)
+    analysis_loop_delay_seconds: int = Field(default=5, ge=0, le=300)
+    analysis_idle_seconds: int = Field(default=300, ge=10, le=3600)
+    universe_refresh_hours: int = Field(default=24, ge=1, le=168)
+    analysis_exchanges: str = "Nasdaq,NYSE,NYSE American"
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_user: str = "stock_app"
@@ -34,8 +46,15 @@ class Settings(BaseSettings):
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
+    @property
+    def symbol_list(self) -> list[str]:
+        return [symbol.strip().upper() for symbol in self.analysis_symbols.split(",") if symbol]
+
+    @property
+    def exchange_list(self) -> list[str]:
+        return [exchange.strip() for exchange in self.analysis_exchanges.split(",") if exchange]
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

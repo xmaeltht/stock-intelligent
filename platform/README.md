@@ -74,15 +74,19 @@ kubectl wait --namespace istio-ingress \
 
 Only namespaces labelled `gateway-access=maelkloud` may attach routes.
 
-Docker Desktop publishes this LoadBalancer on `127.0.0.1:80`, even though the
-Gateway status reports an internal cluster address. Use the zero-configuration
-local hostname:
+The stock application uses its own `stock-intelligence.maelkloud.com`
+hostname and does not reuse the existing `stocks.maelkloud.com` application.
 
-```text
-http://stock-intelligence.localhost
-```
+Public application URLs are published through the existing Cloudflare Tunnel:
 
-The stock application does not claim any `maelkloud.com` hostname.
+| Application | Canonical URL |
+|---|---|
+| Stock Intelligence | `https://stock-intelligence.maelkloud.com` |
+| Argo CD | `https://argocd.maelkloud.com` |
+
+The checked-in `platform/cloudflared-config.yml` preserves the existing
+`stocks.maelkloud.com` route and adds both new hostnames. Database, backend,
+metrics, and Git services remain cluster-private.
 
 Before the stock application is deployed, a request to that host should reach
 `istio-envoy` and return HTTP 404 because no matching `HTTPRoute` exists yet.
@@ -102,13 +106,8 @@ permits repository reads only from the `argocd` namespace.
 
 ## Argo CD access
 
-Argo CD is intentionally not exposed publicly. Access it locally when needed:
-
-```bash
-kubectl port-forward service/argocd-server -n argocd 8080:443
-```
-
-Then open `https://localhost:8080`. Retrieve the initial admin password with:
+Open `https://argocd.maelkloud.com`. Protect this hostname with Cloudflare
+Access in addition to Argo CD authentication. Retrieve the initial admin password with:
 
 ```bash
 kubectl get secret argocd-initial-admin-secret -n argocd \

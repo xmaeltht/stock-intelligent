@@ -1,18 +1,26 @@
 # Stock Intelligence
 
-A local-first Kubernetes foundation for an evidence-backed stock research application. The MVP is intentionally a modular monolith: one Next.js frontend, one FastAPI backend image, PostgreSQL, and a scheduled pipeline using that same backend image.
-
-The current milestone establishes the deployable application boundary. It does **not** yet select stocks, ingest market data, or calculate fair value.
+A local-first Kubernetes stock research application. The MVP is a modular monolith: one Next.js frontend, one FastAPI backend image, PostgreSQL, and a scheduled research pipeline using that same backend image.
 
 ## What is included
 
-- Next.js dashboard at `stock-intelligence.localhost`
-- Same-origin `/api/health` proxy from Next.js to FastAPI
-- FastAPI liveness, database-aware readiness, versioned health, and company-list endpoints
-- SQLAlchemy `companies` model and initial Alembic migration
+- Next.js dark-terminal research UI at `https://stock-intelligence.maelkloud.com`
+  (screener, market pulse, watchlist, and side-by-side compare pages)
+- Same-origin research API proxy from Next.js to FastAPI
+- SEC company-universe and company-facts ingestion, including multi-year
+  revenue and net-income history, equity, operating income, and gross profit
+- Delayed Nasdaq market-price ingestion (full OHLC history) through a
+  replaceable provider adapter
+- Transparent revenue, earnings, free-cash-flow, operating-income, and
+  book-value multiple valuations with margins, ratios, and fiscal-year trends
+- Opportunity scoring, confidence grades, catalysts, risks, and thesis breakers
+- Per-stock research pages with candlestick/Bollinger/RSI/MACD charts,
+  analysis-history tracking, and primary-source links
+- A persistent watchlist with one-click starring from every table
+- SQLAlchemy company and stock-analysis models with Alembic migrations
 - PostgreSQL 17 StatefulSet with a 20 Gi local-path PVC
-- 20 Gi market-data PVC for future Parquet/DuckDB datasets
-- Daily weekday pipeline CronJob scaffold
+- 20 Gi market-data cache PVC
+- Daily weekday research pipeline CronJob
 - Helm chart with ConfigMap and Secret placeholder support
 - `HTTPRoute` attached to a configurable existing Gateway
 - Default-deny NetworkPolicies and component-specific service accounts
@@ -100,9 +108,13 @@ kubectl get pods -n istio-system
 kubectl get pods -n argocd
 ```
 
-The local values target `istio-ingress/maelkloud-gateway`. Open
-`http://stock-intelligence.localhost` for zero-configuration local access.
-The application does not claim or route any `maelkloud.com` hostname.
+The local values target `istio-ingress/maelkloud-gateway`.
+
+- Stock Intelligence: `https://stock-intelligence.maelkloud.com`
+- Argo CD: `https://argocd.maelkloud.com`
+
+Keep the Argo hostname protected
+with Cloudflare Access in addition to Argo's own authentication.
 
 ## Build and deploy with Helm
 
@@ -134,10 +146,9 @@ kubectl get pods,svc,pvc,cronjob,httproute -n stock-intelligence
 kubectl describe httproute stock-intelligence -n stock-intelligence
 ```
 
-Docker Desktop publishes the Gateway LoadBalancer on localhost port 80, so
-`http://stock-intelligence.localhost` works without editing `/etc/hosts`. The current
-foundation uses HTTP. Add cert-manager and a certificate before enabling an
-HTTPS listener.
+Cloudflare terminates public TLS and forwards the two public hostnames through
+the existing tunnel to the Istio Gateway. The Gateway-to-service hop remains
+private HTTP; users only access the HTTPS domain names above.
 
 ### Secrets
 
@@ -194,7 +205,37 @@ Useful endpoints:
 | `GET /health/ready` | PostgreSQL connectivity readiness |
 | `GET /api/v1/health` | Versioned frontend health contract |
 | `GET /api/v1/companies` | Active company list, paginated with `limit` and `offset` |
+| `GET /api/v1/opportunities/summary` | Universe, current analysis, and qualification counts |
+| `GET /api/v1/opportunities/list` | Lean ranked rows with upside, price, volume, score, signal, and watchlist filters |
+| `GET /api/v1/opportunities/overview` | Market pulse: breadth, score/upside distributions, movers, exchange counts |
+| `GET /api/v1/opportunities/compare?tickers=A,B` | Latest full analyses for up to six tickers side by side |
+| `GET /api/v1/opportunities/stocks/{ticker}` | Latest detailed research for a ticker, including stored fundamentals |
+| `GET /api/v1/opportunities/stocks/{ticker}/history` | How price, fair value, and score evolved across analysis runs |
+| `GET /api/v1/watchlist` | Watchlist entries joined with each security's latest analysis |
+| `POST /api/v1/watchlist/{ticker}` / `DELETE …` | Add or remove a watchlist entry |
 | `GET /api/docs` | Local OpenAPI interface |
+
+The dashboard screener defaults to 95%+ modeled upside and can filter by ticker or company,
+maximum share price (including below $5 and below $20), minimum daily volume, trend signal,
+and watchlist membership. Results can be ranked by opportunity score, upside, name, ticker,
+price, or volume in either direction. Each refreshed stock page includes a one-year OHLC
+candlestick chart with volume, SMA-20/50/200, Bollinger Bands (20, 2) with %B, Wilder RSI-14,
+ATR-14 volatility, quarterly support/resistance, golden/death cross detection on the 50/200
+SMAs, 1/5/20-day price changes, 52-week range, MACD (12/26/9) with Elder-style impulse
+coloring, and a transparent six-check technical-confirmation list. Technical indicators support
+trend and timing decisions; they do not alter or prove the fundamental fair-value estimate.
+
+Stock pages additionally surface stored fundamentals: multi-year revenue and net-income
+fiscal trends, revenue CAGR, gross/operating/net/FCF margins, P/S, P/E, P/FCF, and P/B
+ratios, book value per share, and market capitalization — all derived from the same SEC
+company facts used for the valuation. The Market page aggregates breadth (signal and
+impulse), score and upside distributions, top daily gainers/losers, most active securities,
+and analyzer health across the covered universe.
+
+The asset-type selector separates operating-company stocks from ETFs using Nasdaq Trader's
+official ETF flag. Stock mode retains the fundamental-upside model. ETF mode disables the
+upside threshold and ranks funds only by transparent price-trend and liquidity signals; it
+does not apply revenue, EPS, or cash-flow multiples to funds.
 
 The backend init container runs `alembic upgrade head` before the API starts. To create a future migration locally:
 
@@ -205,15 +246,26 @@ cd backend
 
 Review generated migrations before committing them.
 
-## Daily pipeline scaffold
+## Daily research pipeline
 
-The weekday CronJob runs at `23:30 UTC` with `concurrencyPolicy: Forbid`. It currently:
+The continuously running analyzer Deployment:
 
-1. verifies database access and counts companies;
-2. records structured placeholder events for prices, financials, filings, catalysts, risks, valuation, scoring, and validation;
-3. exits non-zero on the first unexpected failure.
+1. refreshes the SEC-listed company universe;
+2. selects up to 500 eligible Nasdaq, NYSE, or NYSE American securities, prioritizing
+   securities that have never been attempted and then the oldest successful analyses;
+3. retrieves delayed prices and SEC company facts while recording per-security failures;
+4. calculates deterministic fair values, scenarios, scores, catalysts, and risks;
+5. persists auditable analysis history and validates the run.
 
-Provider calls and financial calculations are deliberately left for the next milestones. Only the pipeline pod has general TCP egress on ports 80 and 443.
+It starts the next batch five seconds after the previous batch finishes. Once every eligible
+security has been attempted, it remains alive and checks every five minutes for retries or
+analyses older than 24 hours. The batches are resumable: one failed provider response does
+not discard successful work.
+Failed securities cool down for 24 hours before retry, and the dashboard separately reports
+eligible, analyzed, remaining, failed, and percentage coverage. Set `ANALYSIS_SYMBOLS` only
+for an intentional targeted run; leaving it empty enables eligible-universe mode.
+
+Only the pipeline pod has general TCP egress on ports 80 and 443.
 
 ## Storage and recovery note
 

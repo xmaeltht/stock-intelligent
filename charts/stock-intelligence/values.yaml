@@ -8,9 +8,10 @@ namespace:
 frontend:
   replicaCount: 1
   image:
-    repository: stock-intelligence-frontend
-    tag: dev
+    repository: ghcr.io/xmaeltht/stock-intelligent-frontend
+    tag: "latest" # gitops-managed
     pullPolicy: IfNotPresent
+    revision: "2026-07-13-06"
   service:
     port: 3000
   resources:
@@ -24,9 +25,10 @@ frontend:
 backend:
   replicaCount: 1
   image:
-    repository: stock-intelligence-backend
-    tag: dev
+    repository: ghcr.io/xmaeltht/stock-intelligent-backend
+    tag: "latest" # gitops-managed
     pullPolicy: IfNotPresent
+    revision: "2026-07-13-06"
   service:
     port: 8000
   resources:
@@ -62,6 +64,16 @@ marketData:
 config:
   appEnv: local-kubernetes
   logLevel: INFO
+  secUserAgent: "Stock Intelligence local research admin@example.invalid"
+  # Empty means the eligible exchange universe is processed in resumable batches.
+  analysisSymbols: ""
+  analysisBatchSize: 500
+  analysisRetryHours: 24
+  analysisRefreshHours: 24
+  analysisLoopDelaySeconds: 5
+  analysisIdleSeconds: 300
+  universeRefreshHours: 24
+  analysisExchanges: "Nasdaq,NYSE,NYSE American,NYSE Arca,Cboe BZX"
 
 secrets:
   # For GitOps, create this Secret out-of-band and set existingSecret.
@@ -89,10 +101,22 @@ networkPolicy:
   gatewayNamespace: istio-system
 
 dailyPipeline:
-  enabled: true
-  schedule: "30 23 * * 1-5"
+  enabled: false
+  # Frequent resumable batches build initial coverage, then refresh the oldest analyses.
+  schedule: "15 */2 * * *"
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+analyzer:
+  enabled: true
+  replicaCount: 1
   resources:
     requests:
       cpu: 100m

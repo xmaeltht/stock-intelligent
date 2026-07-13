@@ -1,0 +1,33 @@
+# Offline fallback: reconcile from the in-cluster Git snapshot with locally
+# built images. Publish with scripts/publish-local-git.sh.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: stock-intelligence
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/refresh: hard
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git://stock-git.stock-intelligence.svc.cluster.local/stock-intelligence.git
+    targetRevision: main
+    path: charts/stock-intelligence
+    helm:
+      releaseName: stock-intelligence
+      valueFiles:
+        - values.yaml
+        - values-local.yaml
+        - values-offline.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: stock-intelligence
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground

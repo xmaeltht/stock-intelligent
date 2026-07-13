@@ -15,8 +15,18 @@ metadata:
 spec:
   gatewayClassName: istio
   listeners:
-    - name: http
-      hostname: stock-intelligence.localhost
+    - name: stock-public
+      hostname: stock-intelligence.maelkloud.com
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: maelkloud
+    - name: argocd-public
+      hostname: argocd.maelkloud.com
       port: 80
       protocol: HTTP
       allowedRoutes:

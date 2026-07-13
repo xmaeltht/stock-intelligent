@@ -13,9 +13,11 @@ COPY pyproject.toml ./
 COPY app ./app
 COPY alembic.ini ./
 COPY migrations ./migrations
-RUN pip install --no-cache-dir .
+# Normalize source permissions: host files may be user-only readable, and the
+# container runs as uid 10001, which must be able to read them.
+RUN chmod -R a+rX /app && \
+    pip install --no-cache-dir .
 
 USER 10001:10001
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-

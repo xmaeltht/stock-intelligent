@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       annotations:
-        stock-intelligence.local/source-revision: "2026-07-12-03"
+        stock-intelligence.local/source-revision: "2026-07-12-22"
       labels:
         app.kubernetes.io/name: stock-git
         app.kubernetes.io/part-of: stock-intelligence

@@ -1,0 +1,10 @@
+# Offline/dev overrides: use locally built images loaded into the cluster nodes
+# (scripts/load-images-incluster.sh) instead of pulling from ghcr.io.
+frontend:
+  image:
+    repository: stock-intelligence-frontend
+    tag: dev
+backend:
+  image:
+    repository: stock-intelligence-backend
+    tag: dev

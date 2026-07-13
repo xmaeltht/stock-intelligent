@@ -17,10 +17,9 @@ gateway:
   parentRef:
     name: maelkloud-gateway
     namespace: istio-ingress
-    sectionName: http
-  additionalParentRefs: []
+    sectionName: stock-public
   hostnames:
-    - stock-intelligence.localhost
+    - stock-intelligence.maelkloud.com
 
 networkPolicy:
   gatewayNamespace: istio-ingress

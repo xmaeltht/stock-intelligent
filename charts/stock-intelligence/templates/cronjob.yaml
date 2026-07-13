@@ -15,7 +15,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
-      activeDeadlineSeconds: 7200
+      activeDeadlineSeconds: 5400
       template:
         metadata:
           labels:
@@ -59,4 +59,3 @@ spec:
             - name: tmp
               emptyDir: {}
 {{- end }}
-

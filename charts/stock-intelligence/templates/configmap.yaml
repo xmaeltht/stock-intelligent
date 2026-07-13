@@ -12,4 +12,12 @@ data:
   POSTGRES_PORT: "5432"
   BACKEND_URL: http://{{ include "stock-intelligence.fullname" . }}-backend:{{ .Values.backend.service.port }}
   MARKET_DATA_PATH: /data/market
-
+  SEC_USER_AGENT: {{ .Values.config.secUserAgent | quote }}
+  ANALYSIS_SYMBOLS: {{ .Values.config.analysisSymbols | quote }}
+  ANALYSIS_BATCH_SIZE: {{ .Values.config.analysisBatchSize | quote }}
+  ANALYSIS_RETRY_HOURS: {{ .Values.config.analysisRetryHours | quote }}
+  ANALYSIS_REFRESH_HOURS: {{ .Values.config.analysisRefreshHours | quote }}
+  ANALYSIS_LOOP_DELAY_SECONDS: {{ .Values.config.analysisLoopDelaySeconds | quote }}
+  ANALYSIS_IDLE_SECONDS: {{ .Values.config.analysisIdleSeconds | quote }}
+  UNIVERSE_REFRESH_HOURS: {{ .Values.config.universeRefreshHours | quote }}
+  ANALYSIS_EXCHANGES: {{ .Values.config.analysisExchanges | quote }}

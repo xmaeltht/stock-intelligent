@@ -10,12 +10,13 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: git://stock-git.stock-intelligence.svc.cluster.local/stock-intelligence.git
+    repoURL: https://github.com/xmaeltht/stock-intelligent.git
     targetRevision: main
     path: charts/stock-intelligence
     helm:
       releaseName: stock-intelligence
       valueFiles:
+        - values.yaml
         - values-local.yaml
   destination:
     server: https://kubernetes.default.svc

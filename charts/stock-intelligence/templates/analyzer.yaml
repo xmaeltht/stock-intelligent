@@ -1,0 +1,64 @@
+{{- if .Values.analyzer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stock-intelligence.fullname" . }}-analyzer
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "stock-intelligence.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pipeline
+spec:
+  replicas: {{ .Values.analyzer.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "stock-intelligence.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pipeline
+  template:
+    metadata:
+      labels:
+        {{- include "stock-intelligence.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: pipeline
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        stock-intelligence.local/image-revision: {{ .Values.backend.image.revision | quote }}
+    spec:
+      serviceAccountName: {{ include "stock-intelligence.fullname" . }}-pipeline
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: analyzer
+          image: {{ include "stock-intelligence.backendImage" . }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: ["python", "-m", "app.jobs.continuous_analyzer"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "stock-intelligence.fullname" . }}-config
+            - secretRef:
+                name: {{ include "stock-intelligence.secretName" . }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          resources:
+            {{- toYaml .Values.analyzer.resources | nindent 12 }}
+          volumeMounts:
+            - name: market-data
+              mountPath: /data/market
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: market-data
+          persistentVolumeClaim:
+            claimName: {{ include "stock-intelligence.fullname" . }}-market-data
+        - name: tmp
+          emptyDir: {}
+{{- end }}

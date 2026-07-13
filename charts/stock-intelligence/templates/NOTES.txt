@@ -1,6 +1,11 @@
 Stock Intelligence has been rendered for namespace {{ .Values.namespace.name }}.
 
-Host: https://{{ .Values.gateway.hostname }}
+{{- if .Values.gateway.enabled }}
+Hosts:
+{{- range .Values.gateway.hostnames }}
+  - https://{{ . }}
+{{- end }}
+{{- end }}
 Gateway parent: {{ .Values.gateway.parentRef.namespace }}/{{ .Values.gateway.parentRef.name }}
 
 Check the rollout:
@@ -8,4 +13,3 @@ Check the rollout:
 
 The chart contains a placeholder database password unless secrets.existingSecret
 is set or secrets.postgresPassword is overridden. Do not expose that placeholder.
-

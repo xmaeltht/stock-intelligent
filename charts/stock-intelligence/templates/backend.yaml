@@ -20,6 +20,7 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        stock-intelligence.local/image-revision: {{ .Values.backend.image.revision | quote }}
     spec:
       serviceAccountName: {{ include "stock-intelligence.fullname" . }}-backend
       securityContext:
@@ -100,4 +101,3 @@ spec:
     - name: http
       port: {{ .Values.backend.service.port }}
       targetPort: http
-

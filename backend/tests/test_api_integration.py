@@ -1,0 +1,166 @@
+"""End-to-end API checks against an in-memory database."""
+
+from datetime import UTC, date, datetime
+from decimal import Decimal
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.analysis.technicals import build_technical_indicators
+from app.analysis.valuation import EMPTY_FINANCIALS, build_analysis
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app
+from app.models import Company, StockAnalysis
+
+
+@pytest.fixture()
+def client():
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+
+    def override():
+        db = session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override
+    _seed(session_factory)
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def _seed(session_factory) -> None:
+    history = [
+        {
+            "date": f"2026-{1 + index // 28:02d}-{1 + index % 28:02d}",
+            "open": 9.5 + index * 0.05,
+            "high": 10.2 + index * 0.05,
+            "low": 9.3 + index * 0.05,
+            "close": 10.0 + index * 0.05,
+            "volume": 500_000 + index * 1000,
+        }
+        for index in range(120)
+    ]
+    indicators = build_technical_indicators(history)
+    financials = dict(EMPTY_FINANCIALS)
+    financials.update(
+        {
+            "revenue": Decimal("500000000"),
+            "previous_revenue": Decimal("400000000"),
+            "net_income": Decimal("60000000"),
+            "free_cash_flow": Decimal("50000000"),
+            "cash": Decimal("120000000"),
+            "debt": Decimal("40000000"),
+            "shares_outstanding": Decimal("50000000"),
+            "eps": Decimal("1.2"),
+            "equity": Decimal("300000000"),
+            "operating_income": Decimal("80000000"),
+            "gross_profit": Decimal("250000000"),
+            "revenue_history": [
+                {"fy_end": "2023-12-31", "value": 300000000.0},
+                {"fy_end": "2024-12-31", "value": 400000000.0},
+                {"fy_end": "2025-12-31", "value": 500000000.0},
+            ],
+            "net_income_history": [
+                {"fy_end": "2024-12-31", "value": 40000000.0},
+                {"fy_end": "2025-12-31", "value": 60000000.0},
+            ],
+        }
+    )
+    result = build_analysis(financials, Decimal("15.95"))
+    with session_factory() as session:
+        company = Company(
+            ticker="TEST", name="Test Corp", exchange="Nasdaq", cik="0000000001"
+        )
+        session.add(company)
+        session.flush()
+        session.add(
+            StockAnalysis(
+                company_id=company.id,
+                as_of=datetime.now(UTC),
+                price_date=date(2026, 7, 10),
+                current_price=Decimal("15.95"),
+                volume=619_000,
+                price_history=history,
+                technical_indicators=indicators,
+                revenue=financials["revenue"],
+                previous_revenue=financials["previous_revenue"],
+                net_income=financials["net_income"],
+                free_cash_flow=financials["free_cash_flow"],
+                cash=financials["cash"],
+                debt=financials["debt"],
+                shares_outstanding=financials["shares_outstanding"],
+                eps=financials["eps"],
+                sources=[{"name": "SEC", "url": "https://example.com"}],
+                **result,
+            )
+        )
+        session.commit()
+
+
+def test_research_endpoints_respond(client: TestClient) -> None:
+    for path in (
+        "/api/v1/opportunities/summary",
+        "/api/v1/opportunities/list?min_upside=-100",
+        "/api/v1/opportunities/list?min_upside=-100&signal=Bullish",
+        "/api/v1/opportunities/overview",
+        "/api/v1/opportunities/stocks/TEST",
+        "/api/v1/opportunities/stocks/TEST/history",
+        "/api/v1/opportunities/compare?tickers=TEST,FAKE",
+        "/api/v1/watchlist",
+        "/api/v1/watchlist/tickers",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200, (path, response.text[:300])
+
+
+def test_list_payload_stays_lean(client: TestClient) -> None:
+    row = client.get("/api/v1/opportunities/list?min_upside=-100").json()[0]
+    assert "price_history" not in row
+    assert row["technical_indicators"]["signal"]
+
+
+def test_detail_includes_fundamentals_and_new_technicals(client: TestClient) -> None:
+    detail = client.get("/api/v1/opportunities/stocks/TEST").json()
+    assert detail["fundamentals"]["ratios"]["price_to_earnings"] is not None
+    assert detail["fundamentals"]["revenue_history"]
+    assert detail["technical_indicators"]["bb_upper"] is not None
+    assert len(detail["technical_indicators"]["checks"]) == 6
+
+
+def test_watchlist_round_trip(client: TestClient) -> None:
+    assert client.post("/api/v1/watchlist/TEST").status_code == 201
+    rows = client.get("/api/v1/watchlist").json()
+    assert rows and rows[0]["ticker"] == "TEST" and rows[0]["latest"]
+    assert client.get("/api/v1/watchlist/tickers").json() == ["TEST"]
+    watched = client.get("/api/v1/opportunities/list?watched_only=true&min_upside=-100").json()
+    assert len(watched) == 1
+    assert client.delete("/api/v1/watchlist/TEST").status_code == 200
+    assert client.get("/api/v1/watchlist/tickers").json() == []
+
+
+def test_unknown_watchlist_ticker_is_rejected(client: TestClient) -> None:
+    assert client.post("/api/v1/watchlist/NOPE").status_code == 404
+
+
+def test_failure_summary_groups_errors(client: TestClient) -> None:
+    response = client.get("/api/v1/opportunities/failures")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_failed"] == 0
+    assert payload["top_errors"] == []
+
+
+def test_requeue_failures_clears_cooldowns(client: TestClient) -> None:
+    response = client.post("/api/v1/opportunities/requeue-failures")
+    assert response.status_code == 200
+    assert response.json() == {"requeued": 0}

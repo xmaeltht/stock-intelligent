@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Stock Intelligence",
-  description: "Evidence-first stock opportunity research",
+  description: "Evidence-first stock opportunity research terminal",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
