@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     # A comma-separated value remains available for targeted/manual runs.
     analysis_symbols: str = ""
     analysis_batch_size: int = Field(default=500, ge=1, le=10000)
-    analysis_retry_hours: int = Field(default=24, ge=1, le=720)
+    analysis_workers: int = Field(default=4, ge=1, le=16)
+    analysis_retry_hours: int = Field(default=6, ge=1, le=720)
     analysis_refresh_hours: int = Field(default=24, ge=1, le=720)
     analysis_loop_delay_seconds: int = Field(default=5, ge=0, le=300)
     analysis_idle_seconds: int = Field(default=300, ge=10, le=3600)

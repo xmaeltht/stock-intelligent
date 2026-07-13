@@ -68,7 +68,8 @@ config:
   # Empty means the eligible exchange universe is processed in resumable batches.
   analysisSymbols: ""
   analysisBatchSize: 500
-  analysisRetryHours: 24
+  analysisRetryHours: 6
+  analysisWorkers: 4
   analysisRefreshHours: 24
   analysisLoopDelaySeconds: 5
   analysisIdleSeconds: 300

@@ -74,7 +74,8 @@ export default function WatchlistPage() {
                 {rows.map((row) => {
                   const latest = row.latest;
                   const indicators = latest?.technical_indicators ?? {};
-                  const isEtf = row.asset_type === "ETF";
+                  const technicalOnly =
+                    row.asset_type === "ETF" || latest?.qualification === "Technical Screen Only";
                   const change = indicators.change_1d_pct;
                   return (
                     <tr key={row.ticker}>
@@ -90,9 +91,9 @@ export default function WatchlistPage() {
                       <td><b className="assetBadge">{row.asset_type}</b></td>
                       <td className="r num">{latest ? money(latest.current_price) : <span className="dim">pending</span>}</td>
                       <td className={`r num ${change == null ? "dim" : change >= 0 ? "up" : "down"}`}>{pct(change)}</td>
-                      <td className="r num">{latest && !isEtf ? money(latest.fair_value) : <span className="dim">n/a</span>}</td>
-                      <td className={`r num ${latest && !isEtf && latest.upside_pct >= 90 ? "up" : ""}`}>
-                        {latest && !isEtf ? `${latest.upside_pct.toFixed(1)}%` : <span className="dim">n/a</span>}
+                      <td className="r num">{latest && !technicalOnly ? money(latest.fair_value) : <span className="dim">n/a</span>}</td>
+                      <td className={`r num ${latest && !technicalOnly && latest.upside_pct >= 90 ? "up" : ""}`}>
+                        {latest && !technicalOnly ? `${latest.upside_pct.toFixed(1)}%` : <span className="dim">n/a</span>}
                       </td>
                       <td className="r">
                         {latest ? (

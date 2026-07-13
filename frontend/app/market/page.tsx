@@ -5,6 +5,20 @@ import Link from "next/link";
 import TopNav from "../../components/TopNav";
 import { getJson, money, pct, signalClass, type Mover, type Overview } from "../../lib/api";
 
+type FailureGroup = {
+  error: string;
+  count: number;
+  examples: string[];
+  exchanges: Record<string, number>;
+  asset_types: Record<string, number>;
+};
+
+type FailureSummary = {
+  total_failed: number;
+  distinct_errors: number;
+  top_errors: FailureGroup[];
+};
+
 const BREADTH_COLORS: Record<string, string> = {
   Bullish: "#2fbf7f",
   Neutral: "#5f6b7c",
@@ -94,12 +108,16 @@ function MoverList({ title, movers, showChange = true }: { title: string; movers
 
 export default function MarketPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [failures, setFailures] = useState<FailureSummary | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     getJson<Overview>("/api/research/opportunities/overview")
       .then(setOverview)
       .catch(() => setError("Market overview is not available yet. Run the analyzer, then refresh."));
+    getJson<FailureSummary>("/api/research/opportunities/failures")
+      .then(setFailures)
+      .catch(() => setFailures(null));
   }, []);
 
   return (
@@ -184,6 +202,24 @@ export default function MarketPage() {
               <MoverList title="Most active by volume" movers={overview.most_active} showChange={false} />
               <MoverList title="Highest opportunity scores" movers={overview.highest_scores} />
             </div>
+
+            {failures && failures.total_failed > 0 && (
+              <section className="panel" style={{ marginBottom: 14 }}>
+                <div className="panelTitle">
+                  <h2>Analyzer failure queue</h2>
+                  <span className="eyebrow">{failures.total_failed.toLocaleString()} securities retrying</span>
+                </div>
+                {failures.top_errors.slice(0, 8).map((group) => (
+                  <div className="item" key={group.error}>
+                    <div>
+                      <strong>{group.error}</strong>
+                      <span>e.g. {group.examples.join(", ")}</span>
+                    </div>
+                    <b>{group.count.toLocaleString()}</b>
+                  </div>
+                ))}
+              </section>
+            )}
 
             <div className="panelGrid grid2">
               <section className="panel">

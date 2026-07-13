@@ -1,13 +1,20 @@
 from decimal import Decimal
 
 
-def build_etf_analysis(
+def build_technical_screen(
     price: Decimal,
     volume: int | None,
     indicators: dict[str, object],
     history_points: int,
+    qualification: str,
+    extra_risks: list[dict[str, str]] | None = None,
 ) -> dict[str, object]:
-    """Build a technical/liquidity screen without inventing an ETF fair value."""
+    """Rank a security on transparent trend and liquidity signals only.
+
+    Used for ETFs and for operating companies whose filings contain no
+    positive fundamental to anchor a valuation. No fair value is invented:
+    fair value equals the market price and modeled upside is zero.
+    """
     confirmations = int(indicators.get("confirmations") or 0)
     rsi = indicators.get("rsi14")
     score = confirmations * 10
@@ -22,7 +29,7 @@ def build_etf_analysis(
         score += 10
     score = min(100, score)
 
-    risks: list[dict[str, str]] = []
+    risks: list[dict[str, str]] = list(extra_risks or [])
     if volume is None or volume < 100_000:
         risks.append({"severity": "High", "title": "Low or unavailable daily liquidity"})
     elif volume < 500_000:
@@ -48,7 +55,7 @@ def build_etf_analysis(
         "opportunity_score": score,
         "confidence_grade": confidence,
         "risk_level": risk_level,
-        "qualification": "ETF Technical Screen",
+        "qualification": qualification,
         "valuation_methods": [],
         "fundamentals": {},
         "catalysts": [{
@@ -63,3 +70,15 @@ def build_etf_analysis(
             "Daily trading volume falls below the selected liquidity requirement.",
         ],
     }
+
+
+def build_etf_analysis(
+    price: Decimal,
+    volume: int | None,
+    indicators: dict[str, object],
+    history_points: int,
+) -> dict[str, object]:
+    """Build a technical/liquidity screen without inventing an ETF fair value."""
+    return build_technical_screen(
+        price, volume, indicators, history_points, "ETF Technical Screen"
+    )

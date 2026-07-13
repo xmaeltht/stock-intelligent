@@ -129,6 +129,7 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
   }
 
   const isEtf = data.company.asset_type === "ETF";
+  const technicalOnly = isEtf || (data.valuation_methods ?? []).length === 0;
   const indicators = data.technical_indicators ?? {};
   const fundamentals = data.fundamentals ?? {};
   const margins = fundamentals.margins ?? {};
@@ -163,7 +164,7 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
         </div>
 
         <div className="scenarioRow">
-          {!isEtf && (
+          {!technicalOnly && (
             <>
               <div className="scenario"><span>Bear case</span><strong>{money(data.bear_value)}</strong></div>
               <div className="scenario scenario--fair">
@@ -251,13 +252,14 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
         </p>
 
         <div className="detailGrid">
-          {isEtf ? (
+          {technicalOnly ? (
             <section className="panel">
-              <span className="eyebrow">ETF methodology</span>
+              <span className="eyebrow">{isEtf ? "ETF methodology" : "Technical screen only"}</span>
               <h2 style={{ margin: "10px 0" }}>What this score means</h2>
               <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-                This fund is ranked using price trend, RSI, moving averages, and trading liquidity. A
-                corporate earnings-based fair value is intentionally not calculated for a fund.
+                {isEtf
+                  ? "This fund is ranked using price trend, RSI, moving averages, and trading liquidity. A corporate earnings-based fair value is intentionally not calculated for a fund."
+                  : "No positive revenue, earnings, cash flow, book value, or operating income anchors a valuation for this company, so it is ranked on transparent trend and liquidity signals only. A fair value is intentionally not fabricated."}
               </p>
             </section>
           ) : (

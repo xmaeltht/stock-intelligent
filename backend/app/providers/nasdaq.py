@@ -8,10 +8,15 @@ from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-# Public data endpoints throttle aggressively when hit in tight loops. A small
-# polite delay plus one backoff retry converts most transient empties into data.
-REQUEST_DELAY_SECONDS = 0.35
+from app.providers.http import RateLimiter
+
+# Public data endpoints throttle aggressively when hit in bursts. Shared
+# limiters keep the combined request rate polite even with concurrent workers;
+# one backoff retry converts most transient empties into data.
 RETRY_DELAY_SECONDS = 3.0
+NASDAQ_LIMITER = RateLimiter(0.4)
+YAHOO_LIMITER = RateLimiter(0.5)
+STOOQ_LIMITER = RateLimiter(0.3)
 
 
 @dataclass(frozen=True)
@@ -88,7 +93,9 @@ class NasdaqProvider:
         )
         history: list[dict[str, object]] = []
         for attempt in range(2):
-            time.sleep(REQUEST_DELAY_SECONDS if attempt == 0 else RETRY_DELAY_SECONDS)
+            if attempt:
+                time.sleep(RETRY_DELAY_SECONDS)
+            NASDAQ_LIMITER.wait()
             with urlopen(request, timeout=20) as response:  # noqa: S310 - fixed provider URL
                 payload = json.load(response)
             rows = ((payload.get("data") or {}).get("tradesTable") or {}).get("rows") or []
@@ -129,7 +136,9 @@ class NasdaqProvider:
         )
         payload = None
         for attempt in range(2):
-            time.sleep(REQUEST_DELAY_SECONDS if attempt == 0 else RETRY_DELAY_SECONDS)
+            if attempt:
+                time.sleep(RETRY_DELAY_SECONDS)
+            YAHOO_LIMITER.wait()
             try:
                 with urlopen(request, timeout=20) as response:  # noqa: S310 - fixed provider URL
                     payload = json.load(response)
@@ -175,7 +184,7 @@ class NasdaqProvider:
         cutoff = (date.today() - timedelta(days=370)).isoformat()
         url = f"https://stooq.com/q/d/l/?s={stooq_symbol}&i=d"
         request = Request(url, headers={"User-Agent": "Mozilla/5.0 StockIntelligence/0.2"})
-        time.sleep(REQUEST_DELAY_SECONDS)
+        STOOQ_LIMITER.wait()
         with urlopen(request, timeout=20) as response:  # noqa: S310 - fixed provider URL
             payload = response.read().decode("utf-8", errors="replace")
         history: list[dict[str, object]] = []

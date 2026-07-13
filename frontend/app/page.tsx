@@ -262,7 +262,8 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {analyses.map((item) => {
-                const isEtf = item.company.asset_type === "ETF";
+                const technicalOnly =
+                  item.company.asset_type === "ETF" || item.qualification === "Technical Screen Only";
                 const indicators = item.technical_indicators ?? {};
                 const change = indicators.change_1d_pct;
                 return (
@@ -285,9 +286,9 @@ export default function Dashboard() {
                     <td><b className="assetBadge">{item.company.asset_type}</b></td>
                     <td className="r num">{money(item.current_price)}</td>
                     <td className={`r num ${change == null ? "dim" : change >= 0 ? "up" : "down"}`}>{pct(change)}</td>
-                    <td className="r num">{isEtf ? <span className="dim">n/a</span> : money(item.fair_value)}</td>
-                    <td className={`r num ${isEtf ? "dim" : item.upside_pct >= 90 ? "up" : ""}`}>
-                      {isEtf ? "n/a" : `${item.upside_pct.toFixed(1)}%`}
+                    <td className="r num">{technicalOnly ? <span className="dim">n/a</span> : money(item.fair_value)}</td>
+                    <td className={`r num ${technicalOnly ? "dim" : item.upside_pct >= 90 ? "up" : ""}`}>
+                      {technicalOnly ? "n/a" : `${item.upside_pct.toFixed(1)}%`}
                     </td>
                     <td className="r num">{item.volume ? item.volume.toLocaleString() : <span className="dim">—</span>}</td>
                     <td className="r">

@@ -1,15 +1,18 @@
 import csv
 import io
-import time
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-from app.providers.http import fetch_bytes, fetch_json
+from app.providers.http import RateLimiter, fetch_bytes, fetch_json
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
 SEC_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 NASDAQ_TRADED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqtraded.txt"
+
+# SEC fair-access guideline is 10 requests/second; stay well under it even
+# with concurrent analyzer workers.
+SEC_LIMITER = RateLimiter(0.15)
 
 
 @dataclass(frozen=True)
@@ -98,7 +101,7 @@ class SecProvider:
         return {item.symbol: item.asset_type for item in self.traded_instruments()}
 
     def company_facts(self, cik: str) -> dict:
-        time.sleep(0.12)
+        SEC_LIMITER.wait()
         return fetch_json(
             SEC_FACTS_URL.format(cik=cik.zfill(10)),
             self.user_agent,

@@ -2,13 +2,14 @@ import json
 import logging
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.error import HTTPError
 
 from sqlalchemy import func, or_, select
 
-from app.analysis.etf import build_etf_analysis
+from app.analysis.etf import build_etf_analysis, build_technical_screen
 from app.analysis.technicals import build_technical_indicators
 from app.analysis.valuation import EMPTY_FINANCIALS, build_analysis
 from app.core.config import get_settings
@@ -130,7 +131,25 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
                     return
                 raise
             financials = extract_financials(facts)
-            result = build_analysis(financials, quote.close)
+            try:
+                result = build_analysis(financials, quote.close)
+            except ValueError:
+                # No positive fundamental anchors a valuation (pre-revenue,
+                # unprofitable, or non-USD filer). Store a transparent
+                # technical-only screen instead of failing forever.
+                result = build_technical_screen(
+                    quote.close,
+                    quote.volume,
+                    indicators,
+                    len(quote.history),
+                    "Technical Screen Only",
+                    extra_risks=[
+                        {
+                            "severity": "High",
+                            "title": "No positive fundamental supports a valuation",
+                        }
+                    ],
+                )
             sources = [
                 {"name": "SEC Company Facts", "url": SEC_FACTS_URL.format(cik=company.cik)},
                 {"name": "Nasdaq delayed market price", "url": quote.source_url},
@@ -237,16 +256,27 @@ def validate_results() -> tuple[int, int]:
 def analyze_batch(
     symbols: list[str], sec: SecProvider, prices: NasdaqProvider
 ) -> tuple[int, list[dict[str, str]]]:
+    """Analyze a batch concurrently; shared provider rate limiters keep the
+    combined request rate to each upstream source polite."""
+    settings = get_settings()
     succeeded = 0
     failures: list[dict[str, str]] = []
-    for symbol in symbols:
+
+    def run(symbol: str) -> tuple[str, Exception | None]:
         try:
             analyze_symbol(symbol, sec, prices)
-            succeeded += 1
-        except Exception as exc:
-            logger.exception("symbol analysis failed: %s", symbol)
-            mark_analysis_failure(symbol, exc)
-            failures.append({"symbol": symbol, "error": str(exc)})
+            return symbol, None
+        except Exception as exc:  # noqa: BLE001 - one symbol must not sink the batch
+            return symbol, exc
+
+    with ThreadPoolExecutor(max_workers=settings.analysis_workers) as pool:
+        for symbol, error in pool.map(run, symbols):
+            if error is None:
+                succeeded += 1
+            else:
+                logger.error("symbol analysis failed: %s: %s", symbol, error)
+                mark_analysis_failure(symbol, error)
+                failures.append({"symbol": symbol, "error": str(error)})
     return succeeded, failures
 
 

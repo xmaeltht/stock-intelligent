@@ -63,15 +63,16 @@ function CompareContent() {
     },
     {
       label: "Fair value",
-      render: (item) => (item.company.asset_type === "ETF" ? <span className="dim">n/a</span> : money(item.fair_value)),
+      render: (item) =>
+        item.valuation_methods?.length ? money(item.fair_value) : <span className="dim">n/a</span>,
     },
     {
       label: "Upside",
       render: (item) =>
-        item.company.asset_type === "ETF" ? (
-          <span className="dim">n/a</span>
-        ) : (
+        item.valuation_methods?.length ? (
           <span className={item.upside_pct >= 0 ? "up" : "down"}>{item.upside_pct.toFixed(1)}%</span>
+        ) : (
+          <span className="dim">n/a</span>
         ),
     },
     { label: "Score", render: (item) => `${item.opportunity_score}/100` },

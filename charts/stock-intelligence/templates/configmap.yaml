@@ -16,6 +16,7 @@ data:
   ANALYSIS_SYMBOLS: {{ .Values.config.analysisSymbols | quote }}
   ANALYSIS_BATCH_SIZE: {{ .Values.config.analysisBatchSize | quote }}
   ANALYSIS_RETRY_HOURS: {{ .Values.config.analysisRetryHours | quote }}
+  ANALYSIS_WORKERS: {{ .Values.config.analysisWorkers | quote }}
   ANALYSIS_REFRESH_HOURS: {{ .Values.config.analysisRefreshHours | quote }}
   ANALYSIS_LOOP_DELAY_SECONDS: {{ .Values.config.analysisLoopDelaySeconds | quote }}
   ANALYSIS_IDLE_SECONDS: {{ .Values.config.analysisIdleSeconds | quote }}
