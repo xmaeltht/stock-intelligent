@@ -174,3 +174,12 @@ def test_requeue_stale_targets_pre_pipeline_analyses(client: TestClient) -> None
     # scope=all touches every company (exactly one is seeded).
     response = client.post("/api/v1/opportunities/requeue-failures?scope=all")
     assert response.json() == {"scope": "all", "requeued": 1}
+
+
+def test_search_ignores_upside_threshold(client: TestClient) -> None:
+    # A high threshold would exclude a 0%-upside name, but a matching search
+    # must still return it.
+    with_search = client.get(
+        "/api/v1/opportunities/list?search=Test&min_upside=95"
+    ).json()
+    assert any(row["company"]["ticker"] == "TEST" for row in with_search)

@@ -116,27 +116,17 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
                 },
             ]
         else:
+            facts = None
             try:
                 facts = sec.company_facts(company.cik)
             except HTTPError as error:
-                if error.code == 404:
-                    # Funds and some trusts have no XBRL company facts at all;
-                    # retrying them daily forever only inflates the failed queue.
-                    company.is_research_eligible = False
-                    company.eligibility_reason = "No SEC XBRL company facts published"
-                    company.analysis_attempted_at = datetime.now(UTC)
-                    company.analysis_error = None
-                    session.commit()
-                    log_event("symbol_marked_ineligible", symbol=symbol, reason="no company facts")
-                    return
-                raise
-            financials = extract_financials(facts)
-            try:
-                result = build_analysis(financials, quote.close)
-            except ValueError:
-                # No positive fundamental anchors a valuation (pre-revenue,
-                # unprofitable, or non-USD filer). Store a transparent
-                # technical-only screen instead of failing forever.
+                if error.code != 404:
+                    raise
+                # Recently-public stocks (SPACs, new listings) and some trusts
+                # have no XBRL facts yet. They still have price data, so screen
+                # them technically instead of dropping them from the universe.
+            if facts is None:
+                financials = dict(EMPTY_FINANCIALS)
                 result = build_technical_screen(
                     quote.close,
                     quote.volume,
@@ -145,16 +135,41 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
                     "Technical Screen Only",
                     extra_risks=[
                         {
-                            "severity": "High",
-                            "title": "No positive fundamental supports a valuation",
+                            "severity": "Moderate",
+                            "title": "No SEC XBRL fundamentals published yet",
                         }
                     ],
                 )
-            sources = [
-                {"name": "SEC Company Facts", "url": SEC_FACTS_URL.format(cik=company.cik)},
-                {"name": "Nasdaq delayed market price", "url": quote.source_url},
-                {"name": "SEC Company Universe", "url": SEC_TICKERS_URL},
-            ]
+                sources = [
+                    {"name": "Nasdaq delayed market price", "url": quote.source_url},
+                    {"name": "SEC Company Universe", "url": SEC_TICKERS_URL},
+                ]
+            else:
+                financials = extract_financials(facts)
+                try:
+                    result = build_analysis(financials, quote.close)
+                except ValueError:
+                    # No positive fundamental anchors a valuation (pre-revenue,
+                    # unprofitable, or non-USD filer). Store a transparent
+                    # technical-only screen instead of failing forever.
+                    result = build_technical_screen(
+                        quote.close,
+                        quote.volume,
+                        indicators,
+                        len(quote.history),
+                        "Technical Screen Only",
+                        extra_risks=[
+                            {
+                                "severity": "High",
+                                "title": "No positive fundamental supports a valuation",
+                            }
+                        ],
+                    )
+                sources = [
+                    {"name": "SEC Company Facts", "url": SEC_FACTS_URL.format(cik=company.cik)},
+                    {"name": "Nasdaq delayed market price", "url": quote.source_url},
+                    {"name": "SEC Company Universe", "url": SEC_TICKERS_URL},
+                ]
         analysis = StockAnalysis(
             company_id=company.id,
             as_of=datetime.now(UTC),
