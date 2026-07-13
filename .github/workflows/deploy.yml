@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-and-publish:
     # Skip runs triggered by this workflow's own tag-bump commit.
-    if: ${{ !startsWith(github.event.head_commit.message, 'ci: update image tags') }}
+    if: "${{ !startsWith(github.event.head_commit.message, 'ci-update-image-tags') }}"
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out repository
@@ -58,5 +58,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add charts/stock-intelligence/values.yaml
-          git commit -m "ci: update image tags to ${GITHUB_SHA}"
+          git commit -m "ci-update-image-tags ${GITHUB_SHA}"
           git push
