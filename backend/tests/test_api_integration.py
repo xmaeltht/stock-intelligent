@@ -163,4 +163,14 @@ def test_failure_summary_groups_errors(client: TestClient) -> None:
 def test_requeue_failures_clears_cooldowns(client: TestClient) -> None:
     response = client.post("/api/v1/opportunities/requeue-failures")
     assert response.status_code == 200
-    assert response.json() == {"requeued": 0}
+    assert response.json() == {"scope": "failures", "requeued": 0}
+
+
+def test_requeue_stale_targets_pre_pipeline_analyses(client: TestClient) -> None:
+    # The seeded analysis has volume set, so nothing is stale.
+    response = client.post("/api/v1/opportunities/requeue-failures?scope=stale")
+    assert response.status_code == 200
+    assert response.json() == {"scope": "stale", "requeued": 0}
+    # scope=all touches every company (exactly one is seeded).
+    response = client.post("/api/v1/opportunities/requeue-failures?scope=all")
+    assert response.json() == {"scope": "all", "requeued": 1}

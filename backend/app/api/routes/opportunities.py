@@ -336,15 +336,37 @@ def failure_summary(
 
 
 @router.post("/requeue-failures")
-def requeue_failures(db: Annotated[Session, Depends(get_db)]) -> dict:
-    """Clear failure cooldowns so the continuous analyzer retries immediately."""
+def requeue_failures(
+    db: Annotated[Session, Depends(get_db)],
+    scope: Literal["failures", "stale", "all"] = "failures",
+) -> dict:
+    """Clear analyzer cooldowns so the continuous analyzer reprocesses now.
+
+    scope=failures: only securities whose last attempt errored (default).
+    scope=stale: failures plus securities whose latest stored analysis predates
+    the market-data pipeline (no volume/chart/indicators recorded).
+    scope=all: every company.
+    """
+    if scope == "failures":
+        condition = Company.analysis_error.is_not(None)
+    elif scope == "stale":
+        stale_companies = select(StockAnalysis.company_id).where(
+            StockAnalysis.id.in_(latest_ids()),
+            StockAnalysis.volume.is_(None),
+        )
+        condition = or_(
+            Company.analysis_error.is_not(None),
+            Company.id.in_(stale_companies),
+        )
+    else:
+        condition = Company.id.is_not(None)
     result = db.execute(
         update(Company)
-        .where(Company.analysis_error.is_not(None))
+        .where(condition)
         .values(analysis_error=None, analysis_attempted_at=None)
     )
     db.commit()
-    return {"requeued": result.rowcount}
+    return {"scope": scope, "requeued": result.rowcount}
 
 
 @router.get("/stocks/{ticker}", response_model=AnalysisRead)
