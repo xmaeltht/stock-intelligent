@@ -1,28 +1,34 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  createChart,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+  AreaSeries,
+  ColorType,
+  CrosshairMode,
+  LineStyle,
+  type IChartApi,
+  type ISeriesApi,
+  type UTCTimestamp,
+} from "lightweight-charts";
 import type { PricePoint } from "../lib/api";
-
-const W = 1100;
-const PRICE_H = 340;
-const VOL_H = 70;
-const RSI_H = 90;
-const MACD_H = 110;
-const PAD_L = 56;
-const PAD_R = 14;
-const PAD_T = 12;
 
 const COLORS = {
   price: "#5aa2ff",
-  sma20: "#2fbf7f",
-  sma50: "#f0c05a",
-  sma100: "#a99bff",
+  sma20: "#38d39f",
+  sma50: "#f4c95d",
+  sma100: "#b3a4ff",
   sma200: "#ff8fa3",
   bb: "#8a97a8",
   up: "#2fbf7f",
   down: "#e66767",
-  neutral: "#5f6b7c",
-  volume: "#2a3648",
+  signal: "#f4c95d",
+  grid: "rgba(255,255,255,0.045)",
+  text: "#8a97a8",
+  border: "rgba(255,255,255,0.08)",
 };
 
 const sma = (values: number[], period: number): Array<number | null> =>
@@ -81,20 +87,27 @@ const INDICATORS: Array<{ key: Overlay; label: string; color?: string }> = [
   { key: "sma100", label: "SMA 100", color: COLORS.sma100 },
   { key: "sma200", label: "SMA 200", color: COLORS.sma200 },
   { key: "bb", label: "Bollinger", color: COLORS.bb },
-  { key: "volume", label: "Volume", color: COLORS.volume },
-  { key: "rsi", label: "RSI" },
-  { key: "macd", label: "MACD" },
+  { key: "volume", label: "Volume", color: COLORS.up },
+  { key: "rsi", label: "RSI", color: COLORS.sma100 },
+  { key: "macd", label: "MACD", color: COLORS.price },
 ];
 
-export default function StockChart({ history }: { history: PricePoint[] }) {
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const priceSvgRef = useRef<SVGSVGElement | null>(null);
-  const [hover, setHover] = useState<{ index: number; px: number; py: number } | null>(null);
-  const [show, setShow] = useState<Record<Overlay, boolean>>(DEFAULT_SHOW);
-  const [view, setView] = useState<{ s: number; e: number } | null>(null);
-  const [brush, setBrush] = useState<{ start: number; cur: number } | null>(null);
+const PRESETS: Array<{ label: string; bars: number | null }> = [
+  { label: "1M", bars: 21 }, { label: "3M", bars: 63 }, { label: "6M", bars: 126 },
+  { label: "1Y", bars: 252 }, { label: "All", bars: null },
+];
 
-  const wheelRef = useRef<((event: WheelEvent) => void) | null>(null);
+// dates arrive as YYYY-MM-DD; convert to a UTC timestamp so the axis is stable & unique
+const toTime = (iso: string): UTCTimestamp =>
+  (Date.parse(`${iso}T00:00:00Z`) / 1000) as UTCTimestamp;
+
+export default function StockChart({ history }: { history: PricePoint[] }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const legendRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<Record<string, ISeriesApi<"Candlestick" | "Line" | "Histogram" | "Area">>>({});
+  const [show, setShow] = useState<Record<Overlay, boolean>>(DEFAULT_SHOW);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     try {
@@ -104,16 +117,7 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
       /* ignore unavailable storage */
     }
   }, []);
-  useEffect(() => {
-    const svg = priceSvgRef.current;
-    if (!svg) return;
-    const handler = (event: WheelEvent) => {
-      event.preventDefault();
-      wheelRef.current?.(event);
-    };
-    svg.addEventListener("wheel", handler, { passive: false });
-    return () => svg.removeEventListener("wheel", handler);
-  }, []);
+
   const toggle = (key: Overlay) =>
     setShow((current) => {
       const next = { ...current, [key]: !current[key] };
@@ -125,19 +129,27 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
       return next;
     });
 
-  const model = useMemo(() => {
-    const closes = history.map((point) => Number(point.close));
-    const hasOhlc = history.filter((point) => point.high != null && point.low != null && point.open != null).length > history.length * 0.8;
+  // deterministic derived series
+  const data = useMemo(() => {
+    const seen = new Set<string>();
+    const rows = history
+      .filter((point) => point.date && !seen.has(point.date) && seen.add(point.date))
+      .map((point) => ({ ...point, close: Number(point.close) }))
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+    const closes = rows.map((row) => row.close);
+    const hasOhlc =
+      rows.filter((row) => row.high != null && row.low != null && row.open != null).length >
+      rows.length * 0.8;
     const sma20 = sma(closes, 20);
     const sma50 = sma(closes, 50);
     const sma100 = sma(closes, 100);
     const sma200 = sma(closes, 200);
-    const bbUpper: Array<number | null> = closes.map((_, index) => {
+    const bbUpper = closes.map((_, index) => {
       if (index + 1 < 20) return null;
       const window = closes.slice(index - 19, index + 1);
       return window.reduce((sum, value) => sum + value, 0) / 20 + 2 * stdev(window);
     });
-    const bbLower: Array<number | null> = closes.map((_, index) => {
+    const bbLower = closes.map((_, index) => {
       if (index + 1 < 20) return null;
       const window = closes.slice(index - 19, index + 1);
       return window.reduce((sum, value) => sum + value, 0) / 20 - 2 * stdev(window);
@@ -158,160 +170,258 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
             : "neutral",
     );
     const rsi = wilderRsiSeries(closes);
-    const highs = history.map((point, index) => Number(point.high ?? closes[index]));
-    const lows = history.map((point, index) => Number(point.low ?? closes[index]));
-    const plotted = [
-      ...highs,
-      ...lows,
-      ...(bbUpper.filter((value): value is number => value !== null)),
-      ...(bbLower.filter((value): value is number => value !== null)),
-    ];
+
+    const time = rows.map((row) => toTime(row.date));
+    const lineData = (values: Array<number | null>) =>
+      values
+        .map((value, index) => (value == null ? null : { time: time[index], value }))
+        .filter((point): point is { time: UTCTimestamp; value: number } => point !== null);
+
     return {
+      rows,
       closes,
       hasOhlc,
-      sma20,
-      sma50,
-      sma100,
-      sma200,
-      bbUpper,
-      bbLower,
-      macd,
-      macdSignal,
-      histogram,
-      impulse,
-      rsi,
-      highs,
-      lows,
-      min: Math.min(...plotted),
-      max: Math.max(...plotted),
-      maxVolume: Math.max(...history.map((point) => point.volume ?? 0), 1),
+      time,
+      candles: rows.map((row, index) => ({
+        time: time[index],
+        open: Number(row.open ?? row.close),
+        high: Number(row.high ?? row.close),
+        low: Number(row.low ?? row.close),
+        close: row.close,
+      })),
+      area: rows.map((row, index) => ({ time: time[index], value: row.close })),
+      volume: rows.map((row, index) => ({
+        time: time[index],
+        value: row.volume ?? 0,
+        color:
+          index > 0 && closes[index] >= closes[index - 1]
+            ? "rgba(47,191,127,0.34)"
+            : "rgba(230,103,103,0.34)",
+      })),
+      sma20: lineData(sma20),
+      sma50: lineData(sma50),
+      sma100: lineData(sma100),
+      sma200: lineData(sma200),
+      bbUpper: lineData(bbUpper),
+      bbLower: lineData(bbLower),
+      rsi: lineData(rsi),
+      macd: lineData(macd),
+      macdSignal: lineData(macdSignal),
+      histogram: rows.map((row, index) => ({
+        time: time[index],
+        value: histogram[index],
+        color:
+          impulse[index] === "up"
+            ? "rgba(47,191,127,0.85)"
+            : impulse[index] === "down"
+              ? "rgba(230,103,103,0.85)"
+              : "rgba(95,107,124,0.7)",
+      })),
     };
   }, [history]);
+
+  // build the chart; rebuild only when data or the pane layout (rsi/macd) changes
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || data.rows.length < 2) return;
+
+    const priceH = 400;
+    const rsiH = show.rsi ? 108 : 0;
+    const macdH = show.macd ? 128 : 0;
+
+    const chart = createChart(container, {
+      width: container.clientWidth,
+      height: priceH + rsiH + macdH,
+      layout: {
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor: COLORS.text,
+        fontFamily: "var(--mono, ui-monospace), monospace",
+        fontSize: 11,
+        attributionLogo: false,
+        panes: { separatorColor: COLORS.border, separatorHoverColor: "rgba(90,162,255,0.35)" },
+      },
+      grid: { vertLines: { color: COLORS.grid }, horzLines: { color: COLORS.grid } },
+      rightPriceScale: { borderColor: COLORS.border, scaleMargins: { top: 0.06, bottom: 0.06 } },
+      timeScale: { borderColor: COLORS.border, rightOffset: 4, barSpacing: 8, minBarSpacing: 1 },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: "rgba(138,151,168,0.55)", width: 1, style: LineStyle.Dashed, labelBackgroundColor: "#1a2233" },
+        horzLine: { color: "rgba(138,151,168,0.55)", labelBackgroundColor: "#1a2233" },
+      },
+      handleScroll: true,
+      handleScale: true,
+      autoSize: false,
+    });
+    chartRef.current = chart;
+    const series: typeof seriesRef.current = {};
+
+    // ── price pane (0)
+    const candle = chart.addSeries(CandlestickSeries, {
+      upColor: COLORS.up, downColor: COLORS.down,
+      borderUpColor: COLORS.up, borderDownColor: COLORS.down,
+      wickUpColor: "rgba(47,191,127,0.9)", wickDownColor: "rgba(230,103,103,0.9)",
+      priceLineVisible: true, priceLineColor: "rgba(90,162,255,0.5)", priceLineStyle: LineStyle.Dotted,
+      lastValueVisible: true,
+      visible: show.candles && data.hasOhlc,
+    }, 0);
+    candle.setData(data.candles);
+    series.candle = candle;
+
+    const area = chart.addSeries(AreaSeries, {
+      lineColor: COLORS.price, lineWidth: 2,
+      topColor: "rgba(90,162,255,0.28)", bottomColor: "rgba(90,162,255,0.01)",
+      priceLineVisible: false, lastValueVisible: !(show.candles && data.hasOhlc),
+      crosshairMarkerVisible: true,
+      visible: !(show.candles && data.hasOhlc),
+    }, 0);
+    area.setData(data.area);
+    series.area = area;
+
+    const addLine = (key: string, points: typeof data.sma20, color: string, width: number, dashed = false) => {
+      const line = chart.addSeries(LineSeries, {
+        color, lineWidth: width as 1 | 2 | 3 | 4,
+        lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      }, 0);
+      line.setData(points);
+      series[key] = line;
+      return line;
+    };
+    addLine("sma20", data.sma20, COLORS.sma20, 1.5).applyOptions({ visible: show.sma20 });
+    addLine("sma50", data.sma50, COLORS.sma50, 1.5).applyOptions({ visible: show.sma50 });
+    addLine("sma100", data.sma100, COLORS.sma100, 1.5).applyOptions({ visible: show.sma100 });
+    addLine("sma200", data.sma200, COLORS.sma200, 2).applyOptions({ visible: show.sma200 });
+    addLine("bbUpper", data.bbUpper, "rgba(138,151,168,0.7)", 1, true).applyOptions({ visible: show.bb });
+    addLine("bbLower", data.bbLower, "rgba(138,151,168,0.7)", 1, true).applyOptions({ visible: show.bb });
+
+    // volume overlay at the bottom of the price pane
+    const volume = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "vol",
+      priceLineVisible: false, lastValueVisible: false,
+      visible: show.volume,
+    }, 0);
+    volume.setData(data.volume);
+    chart.priceScale("vol", 0).applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    series.volume = volume;
+
+    // ── RSI pane (1)
+    if (show.rsi) {
+      const rsi = chart.addSeries(LineSeries, {
+        color: COLORS.sma100, lineWidth: 2,
+        priceLineVisible: false, lastValueVisible: true,
+        priceFormat: { type: "custom", formatter: (v: number) => v.toFixed(0), minMove: 1 },
+      }, 1);
+      rsi.setData(data.rsi);
+      [{ p: 70, c: "rgba(230,103,103,0.6)" }, { p: 50, c: "rgba(138,151,168,0.35)" }, { p: 30, c: "rgba(47,191,127,0.6)" }].forEach(({ p, c }) =>
+        rsi.createPriceLine({ price: p, color: c, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "" }),
+      );
+      series.rsi = rsi;
+    }
+
+    // ── MACD pane (2 or 1 if rsi hidden)
+    if (show.macd) {
+      const macdPane = show.rsi ? 2 : 1;
+      const hist = chart.addSeries(HistogramSeries, {
+        priceLineVisible: false, lastValueVisible: false,
+      }, macdPane);
+      hist.setData(data.histogram);
+      series.histogram = hist;
+      const macdLine = chart.addSeries(LineSeries, {
+        color: "#dfe7f1", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      }, macdPane);
+      macdLine.setData(data.macd);
+      series.macd = macdLine;
+      const signalLine = chart.addSeries(LineSeries, {
+        color: COLORS.signal, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      }, macdPane);
+      signalLine.setData(data.macdSignal);
+      series.macdSignal = signalLine;
+    }
+
+    seriesRef.current = series;
+
+    // pane heights
+    const panes = chart.panes();
+    if (panes[0]) panes[0].setHeight(priceH);
+    let paneCursor = 1;
+    if (show.rsi && panes[paneCursor]) panes[paneCursor++].setHeight(rsiH);
+    if (show.macd && panes[paneCursor]) panes[paneCursor].setHeight(macdH);
+
+    chart.timeScale().fitContent();
+    setReady(true);
+
+    // crosshair legend
+    const legend = legendRef.current;
+    const fmt = (v: number | undefined) => (v == null ? "—" : v.toFixed(2));
+    const updateLegend = (index: number) => {
+      if (!legend) return;
+      const row = data.rows[index];
+      if (!row) return;
+      const dChange = index > 0 ? ((row.close - data.closes[index - 1]) / data.closes[index - 1]) * 100 : 0;
+      const cls = dChange >= 0 ? "up" : "down";
+      legend.innerHTML =
+        `<b>${row.date}</b>` +
+        (data.hasOhlc
+          ? `<span>O <em>${fmt(Number(row.open))}</em> H <em>${fmt(Number(row.high))}</em> L <em>${fmt(Number(row.low))}</em> C <em>${fmt(row.close)}</em></span>`
+          : `<span>C <em>${fmt(row.close)}</em></span>`) +
+        `<span class="${cls}">${dChange >= 0 ? "+" : ""}${dChange.toFixed(2)}%</span>` +
+        `<span>Vol <em>${row.volume ? row.volume.toLocaleString() : "—"}</em></span>`;
+    };
+    updateLegend(data.rows.length - 1);
+    chart.subscribeCrosshairMove((param) => {
+      if (param.time == null) {
+        updateLegend(data.rows.length - 1);
+        return;
+      }
+      const index = data.time.findIndex((t) => t === param.time);
+      if (index >= 0) updateLegend(index);
+    });
+
+    const observer = new ResizeObserver(() => {
+      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
+    });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = {};
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, show.rsi, show.macd]);
+
+  // live overlay visibility (no rebuild) for price-pane indicators
+  useEffect(() => {
+    const s = seriesRef.current;
+    if (!chartRef.current || !s.candle) return;
+    const candlesOn = show.candles && data.hasOhlc;
+    s.candle?.applyOptions({ visible: candlesOn, lastValueVisible: candlesOn });
+    s.area?.applyOptions({ visible: !candlesOn, lastValueVisible: !candlesOn });
+    s.sma20?.applyOptions({ visible: show.sma20 });
+    s.sma50?.applyOptions({ visible: show.sma50 });
+    s.sma100?.applyOptions({ visible: show.sma100 });
+    s.sma200?.applyOptions({ visible: show.sma200 });
+    s.bbUpper?.applyOptions({ visible: show.bb });
+    s.bbLower?.applyOptions({ visible: show.bb });
+    s.volume?.applyOptions({ visible: show.volume });
+  }, [show.candles, show.sma20, show.sma50, show.sma100, show.sma200, show.bb, show.volume, data.hasOhlc]);
+
+  const applyPreset = (bars: number | null) => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    if (bars == null) {
+      chart.timeScale().fitContent();
+      return;
+    }
+    const n = data.rows.length;
+    chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - bars), to: n - 1 + 4 });
+  };
 
   if (history.length < 2) {
     return <div className="notice">Chart data will appear after the continuous analyzer refreshes this security.</div>;
   }
-
-  const count = history.length;
-  // visible window (zoom). null → full range.
-  const vs = view ? Math.max(0, Math.min(view.s, count - 2)) : 0;
-  const ve = view ? Math.max(vs + 1, Math.min(view.e, count - 1)) : count - 1;
-  const vspan = ve - vs;
-  const inView = (index: number) => index >= vs && index <= ve;
-
-  // y-range recomputed over just the visible window so zoom fills the frame
-  const vis: number[] = [];
-  for (let i = vs; i <= ve; i += 1) {
-    vis.push(model.highs[i], model.lows[i]);
-    if (show.bb) {
-      if (model.bbUpper[i] != null) vis.push(model.bbUpper[i] as number);
-      if (model.bbLower[i] != null) vis.push(model.bbLower[i] as number);
-    }
-    if (show.sma20 && model.sma20[i] != null) vis.push(model.sma20[i] as number);
-    if (show.sma50 && model.sma50[i] != null) vis.push(model.sma50[i] as number);
-    if (show.sma100 && model.sma100[i] != null) vis.push(model.sma100[i] as number);
-    if (show.sma200 && model.sma200[i] != null) vis.push(model.sma200[i] as number);
-  }
-  const vmax = Math.max(...vis);
-  const vmin = Math.min(...vis);
-  const range = vmax - vmin || 1;
-  const x = (index: number) => PAD_L + ((index - vs) / vspan) * (W - PAD_L - PAD_R);
-  const y = (value: number) => PAD_T + ((vmax - value) / range) * (PRICE_H - PAD_T * 2);
-  const bandWidth = Math.max(1.2, (W - PAD_L - PAD_R) / (vspan + 1) - 1.2);
-  const maxVolume = Math.max(...history.slice(vs, ve + 1).map((p) => p.volume ?? 0), 1);
-
-  const line = (values: Array<number | null>) =>
-    values
-      .map((value, index) => (value === null || !inView(index) ? null : `${x(index).toFixed(1)},${y(value).toFixed(1)}`))
-      .filter(Boolean)
-      .join(" ");
-
-  const bandPath = (() => {
-    const upper = model.bbUpper
-      .map((value, index) => (value === null || !inView(index) ? null : `${x(index).toFixed(1)},${y(value).toFixed(1)}`))
-      .filter(Boolean);
-    const lower = model.bbLower
-      .map((value, index) => (value === null || !inView(index) ? null : `${x(index).toFixed(1)},${y(value).toFixed(1)}`))
-      .filter(Boolean)
-      .reverse();
-    if (!upper.length) return "";
-    return `M${upper.join(" L")} L${lower.join(" L")} Z`;
-  })();
-
-  const rsiY = (value: number) => 10 + ((100 - value) / 100) * (RSI_H - 20);
-  const macdRange = Math.max(
-    ...model.macd.slice(vs, ve + 1).map(Math.abs),
-    ...model.macdSignal.slice(vs, ve + 1).map(Math.abs),
-    ...model.histogram.slice(vs, ve + 1).map(Math.abs),
-    0.01,
-  );
-  const macdMid = MACD_H / 2;
-  const macdY = (value: number) => macdMid - (value / macdRange) * (macdMid - 12);
-  const macdLine = (values: number[]) =>
-    values
-      .map((value, index) => (inView(index) ? `${x(index).toFixed(1)},${macdY(value).toFixed(1)}` : null))
-      .filter(Boolean)
-      .join(" ");
-
-  const priceTicks = [0, 0.25, 0.5, 0.75, 1].map((fraction) => vmin + range * fraction);
-  const dateTickIndexes = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(vs + f * vspan));
-
-  const pointerIndex = (clientX: number, target: SVGSVGElement) => {
-    const rect = target.getBoundingClientRect();
-    const relative = ((clientX - rect.left) / rect.width) * W;
-    const fraction = Math.min(1, Math.max(0, (relative - PAD_L) / (W - PAD_L - PAD_R)));
-    return Math.round(vs + fraction * vspan);
-  };
-
-  const onMove = (event: React.MouseEvent<SVGSVGElement>) => {
-    const index = pointerIndex(event.clientX, event.currentTarget);
-    const wrapRect = wrapRef.current?.getBoundingClientRect();
-    setHover({
-      index,
-      px: wrapRect ? event.clientX - wrapRect.left : 0,
-      py: wrapRect ? event.clientY - wrapRect.top : 0,
-    });
-    if (brush) setBrush({ ...brush, cur: index });
-  };
-
-  const onDown = (event: React.MouseEvent<SVGSVGElement>) => {
-    const index = pointerIndex(event.clientX, event.currentTarget);
-    setBrush({ start: index, cur: index });
-  };
-  const onUp = () => {
-    if (brush) {
-      const s = Math.min(brush.start, brush.cur);
-      const e = Math.max(brush.start, brush.cur);
-      if (e - s >= 4) setView({ s, e });
-      setBrush(null);
-    }
-  };
-
-  const zoom = (factor: number, center: number) => {
-    const newSpan = Math.max(10, Math.min(count - 1, Math.round(vspan * factor)));
-    const ratio = (center - vs) / vspan || 0.5;
-    let s = Math.round(center - ratio * newSpan);
-    s = Math.max(0, Math.min(s, count - 1 - newSpan));
-    setView(newSpan >= count - 1 ? null : { s, e: s + newSpan });
-  };
-
-  const presets: Array<{ label: string; days: number | null }> = [
-    { label: "1M", days: 21 }, { label: "3M", days: 63 }, { label: "6M", days: 126 },
-    { label: "1Y", days: 252 }, { label: "All", days: null },
-  ];
-  const applyPreset = (days: number | null) => {
-    if (days === null || days >= count) setView(null);
-    else setView({ s: count - 1 - days, e: count - 1 });
-  };
-
-  const hovered = hover ? history[hover.index] : null;
-  const canCandles = model.hasOhlc && show.candles;
-  wheelRef.current = (event: WheelEvent) => {
-    const svg = priceSvgRef.current;
-    if (!svg) return;
-    zoom(event.deltaY < 0 ? 0.82 : 1.22, pointerIndex(event.clientX, svg));
-  };
-  const zoomed = view !== null;
 
   return (
     <div className="chartShell">
@@ -330,170 +440,20 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
           ))}
         </div>
         <div className="rangePicker">
-          {presets.map((preset) => (
-            <button key={preset.label} className="rangeBtn" onClick={() => applyPreset(preset.days)}>
+          {PRESETS.map((preset) => (
+            <button key={preset.label} className="rangeBtn" onClick={() => applyPreset(preset.bars)}>
               {preset.label}
             </button>
           ))}
-          {zoomed && <button className="rangeBtn rangeBtn--reset" onClick={() => setView(null)}>Reset ✕</button>}
         </div>
       </div>
-      <div className="chartWrap" ref={wrapRef}>
-        <svg
-          ref={priceSvgRef}
-          className="stockChart"
-          style={{ cursor: brush ? "ew-resize" : "crosshair", touchAction: "none" }}
-          viewBox={`0 0 ${W} ${PRICE_H + VOL_H}`}
-          role="img"
-          aria-label="Zoomable price chart with selectable moving averages, Bollinger bands, and volume. Scroll to zoom, drag to select a range."
-          onMouseMove={onMove}
-          onMouseLeave={() => { setHover(null); setBrush(null); }}
-          onMouseDown={onDown}
-          onMouseUp={onUp}
-        >
-          {priceTicks.map((tick) => (
-            <g key={tick}>
-              <line x1={PAD_L} x2={W - PAD_R} y1={y(tick)} y2={y(tick)} className="gridLine" />
-              <text x={PAD_L - 8} y={y(tick) + 3} textAnchor="end">${tick >= 100 ? tick.toFixed(0) : tick.toFixed(2)}</text>
-            </g>
-          ))}
-          {show.bb && bandPath && <path d={bandPath} fill="#8a97a815" stroke="none" />}
-          {show.bb && <polyline points={line(model.bbUpper)} fill="none" stroke={COLORS.bb} strokeWidth="1" strokeDasharray="3 4" opacity="0.7" />}
-          {show.bb && <polyline points={line(model.bbLower)} fill="none" stroke={COLORS.bb} strokeWidth="1" strokeDasharray="3 4" opacity="0.7" />}
-          {show.volume && history.map((point, index) => {
-            if (!inView(index)) return null;
-            const barHeight = ((point.volume ?? 0) / maxVolume) * (VOL_H - 8);
-            const upDay = index > 0 && model.closes[index] >= model.closes[index - 1];
-            return (
-              <rect
-                key={`volume-${point.date}`}
-                x={x(index) - bandWidth / 2}
-                y={PRICE_H + VOL_H - barHeight}
-                width={bandWidth}
-                height={Math.max(barHeight, 0.5)}
-                fill={upDay ? "#2fbf7f3d" : "#e666673d"}
-              />
-            );
-          })}
-          {canCandles
-            ? history.map((point, index) => {
-                if (!inView(index)) return null;
-                const open = Number(point.open ?? point.close);
-                const close = model.closes[index];
-                const upDay = close >= open;
-                const color = upDay ? COLORS.up : COLORS.down;
-                const bodyTop = y(Math.max(open, close));
-                const bodyHeight = Math.max(Math.abs(y(open) - y(close)), 1);
-                return (
-                  <g key={`candle-${point.date}`}>
-                    <line x1={x(index)} x2={x(index)} y1={y(model.highs[index])} y2={y(model.lows[index])} stroke={color} strokeWidth="1" />
-                    <rect x={x(index) - bandWidth / 2} y={bodyTop} width={bandWidth} height={bodyHeight} fill={color} rx="0.5" />
-                  </g>
-                );
-              })
-            : <polyline points={line(model.closes.map((value) => value))} fill="none" stroke={COLORS.price} strokeWidth="2" strokeLinejoin="round" />}
-          {show.sma200 && <polyline points={line(model.sma200)} fill="none" stroke={COLORS.sma200} strokeWidth="1.8" opacity="0.95" />}
-          {show.sma100 && <polyline points={line(model.sma100)} fill="none" stroke={COLORS.sma100} strokeWidth="1.6" opacity="0.9" />}
-          {show.sma50 && <polyline points={line(model.sma50)} fill="none" stroke={COLORS.sma50} strokeWidth="1.5" />}
-          {show.sma20 && <polyline points={line(model.sma20)} fill="none" stroke={COLORS.sma20} strokeWidth="1.5" />}
-          {dateTickIndexes.map((index) => (
-            <text key={`date-${index}`} x={x(index)} y={PRICE_H + VOL_H - 2} textAnchor={index === 0 ? "start" : index === count - 1 ? "end" : "middle"} className="axisLabel">
-              {history[index].date}
-            </text>
-          ))}
-          {brush && Math.abs(brush.cur - brush.start) >= 1 && (
-            <rect
-              x={x(Math.min(brush.start, brush.cur))}
-              y={PAD_T}
-              width={Math.abs(x(brush.cur) - x(brush.start))}
-              height={PRICE_H + VOL_H - PAD_T}
-              fill="#5aa2ff22"
-              stroke="#5aa2ff"
-              strokeWidth="0.8"
-              strokeDasharray="4 3"
-            />
-          )}
-          {hover && (
-            <line x1={x(hover.index)} x2={x(hover.index)} y1={PAD_T} y2={PRICE_H + VOL_H} stroke="#8a97a8" strokeWidth="0.7" strokeDasharray="3 3" />
-          )}
-        </svg>
-        {hover && hovered && (
-          <div
-            className="chartTip"
-            style={{
-              left: Math.min(hover.px + 16, (wrapRef.current?.clientWidth ?? 600) - 190),
-              top: Math.max(hover.py - 90, 4),
-            }}
-          >
-            <b>{hovered.date}</b><br />
-            {model.hasOhlc && hovered.open != null && (
-              <>O {Number(hovered.open).toFixed(2)} · H {Number(hovered.high).toFixed(2)} · L {Number(hovered.low).toFixed(2)}<br /></>
-            )}
-            C <b>{Number(hovered.close).toFixed(2)}</b><br />
-            Vol {hovered.volume ? hovered.volume.toLocaleString() : "—"}<br />
-            {model.sma20[hover.index] != null && <>SMA20 {model.sma20[hover.index]!.toFixed(2)} </>}
-            {model.sma50[hover.index] != null && <>· SMA50 {model.sma50[hover.index]!.toFixed(2)}</>}
-          </div>
-        )}
+      <div className="proChartWrap">
+        <div ref={legendRef} className="proLegend" />
+        <div ref={containerRef} className="proChart" style={{ opacity: ready ? 1 : 0 }} />
       </div>
-
-      {show.rsi && (
-      <>
-      <div className="chartLegend" style={{ marginTop: 10 }}>
-        <span><i style={{ background: COLORS.sma100 }} /> RSI 14 (Wilder)</span>
-        <span className="dim">70 overbought · 30 oversold</span>
+      <div className="chartHint">
+        Scroll to zoom · drag to pan · drag the pane dividers to resize · hover for the crosshair readout
       </div>
-      <svg className="stockChart" viewBox={`0 0 ${W} ${RSI_H}`} role="img" aria-label="RSI 14 oscillator">
-        {[30, 50, 70].map((level) => (
-          <g key={level}>
-            <line x1={PAD_L} x2={W - PAD_R} y1={rsiY(level)} y2={rsiY(level)} className="gridLine" strokeDasharray={level === 50 ? "" : "4 4"} />
-            <text x={PAD_L - 8} y={rsiY(level) + 3} textAnchor="end">{level}</text>
-          </g>
-        ))}
-        <rect x={PAD_L} y={rsiY(70)} width={W - PAD_L - PAD_R} height={rsiY(30) - rsiY(70)} fill="#5aa2ff0f" />
-        <polyline
-          points={model.rsi.map((value, index) => (value === null || !inView(index) ? null : `${x(index).toFixed(1)},${rsiY(value).toFixed(1)}`)).filter(Boolean).join(" ")}
-          fill="none"
-          stroke={COLORS.sma100}
-          strokeWidth="1.6"
-        />
-      </svg>
-      </>
-      )}
-
-      {show.macd && (
-      <>
-      <div className="chartLegend" style={{ marginTop: 10 }}>
-        <span>Impulse MACD (12, 26, 9)</span>
-        <span style={{ color: COLORS.up }}>Bullish impulse</span>
-        <span style={{ color: COLORS.down }}>Bearish impulse</span>
-        <span className="dim">Mixed</span>
-      </div>
-      <svg className="stockChart" viewBox={`0 0 ${W} ${MACD_H}`} role="img" aria-label="Impulse MACD histogram with MACD and signal lines">
-        <line x1={PAD_L} x2={W - PAD_R} y1={macdMid} y2={macdMid} className="gridLine" />
-        {model.histogram.map((value, index) => {
-          if (!inView(index)) return null;
-          const barY = macdY(value);
-          const color = model.impulse[index] === "up" ? COLORS.up : model.impulse[index] === "down" ? COLORS.down : COLORS.neutral;
-          return (
-            <rect
-              key={`macd-${history[index].date}`}
-              x={x(index) - bandWidth / 2}
-              y={Math.min(macdMid, barY)}
-              width={bandWidth}
-              height={Math.max(1, Math.abs(macdMid - barY))}
-              fill={color}
-              opacity="0.85"
-            />
-          );
-        })}
-        <polyline points={macdLine(model.macd)} fill="none" stroke="#dfe7f1" strokeWidth="1.4" />
-        <polyline points={macdLine(model.macdSignal)} fill="none" stroke={COLORS.sma50} strokeWidth="1.4" />
-        <text x={PAD_L} y={12}>MACD {model.macd.at(-1)?.toFixed(3)}</text>
-        <text x={W - PAD_R} y={12} textAnchor="end">Signal {model.macdSignal.at(-1)?.toFixed(3)}</text>
-      </svg>
-      </>
-      )}
     </div>
   );
 }
