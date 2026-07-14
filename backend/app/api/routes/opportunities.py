@@ -17,6 +17,8 @@ from app.schemas.analysis import (
     AnalysisRead,
     DashboardSummary,
     DistributionBucket,
+    IdeaItem,
+    IdeasResponse,
     MarketOverview,
     MoverItem,
 )
@@ -312,6 +314,150 @@ def market_overview(db: Annotated[Session, Depends(get_db)]) -> MarketOverview:
         most_active=sorted(with_volume, key=lambda item: item.volume, reverse=True)[:8],
         highest_scores=sorted(movers, key=lambda item: item.opportunity_score, reverse=True)[:8],
     )
+
+
+def _num(value: object) -> float | None:
+    return float(value) if isinstance(value, int | float) else None
+
+
+@router.get("/ideas", response_model=IdeasResponse)
+def ideas(
+    db: Annotated[Session, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 15,
+) -> IdeasResponse:
+    """Two transparent, rules-based idea lists — swing (momentum/liquidity) and
+    long-term (quality fundamentals + long-term uptrend). Deterministic screens,
+    not personalized investment advice."""
+    settings = get_settings()
+    rows = db.execute(
+        select(
+            Company.ticker,
+            Company.name,
+            Company.asset_type,
+            StockAnalysis.current_price,
+            StockAnalysis.upside_pct,
+            StockAnalysis.opportunity_score,
+            StockAnalysis.confidence_grade,
+            StockAnalysis.risk_level,
+            StockAnalysis.qualification,
+            StockAnalysis.volume,
+            StockAnalysis.net_income,
+            StockAnalysis.free_cash_flow,
+            StockAnalysis.revenue_growth_pct,
+            StockAnalysis.technical_indicators,
+            StockAnalysis.fundamentals,
+        )
+        .join(Company, Company.id == StockAnalysis.company_id)
+        .where(
+            StockAnalysis.id.in_(latest_ids()),
+            *eligible_conditions(settings),
+            StockAnalysis.upside_pct <= IMPLAUSIBLE_UPSIDE_PCT,
+        )
+    ).all()
+
+    swing: list[IdeaItem] = []
+    long_term: list[IdeaItem] = []
+    for row in rows:
+        tech = row.technical_indicators or {}
+        signal = tech.get("signal")
+        rsi = _num(tech.get("rsi14"))
+        conf = int(tech.get("confirmations") or 0)
+        change_5d = _num(tech.get("change_5d_pct"))
+        change_1d = _num(tech.get("change_1d_pct"))
+        sma20 = _num(tech.get("sma20"))
+        sma50 = _num(tech.get("sma50"))
+        sma200 = _num(tech.get("sma200"))
+        price = float(row.current_price)
+        volume = row.volume or 0
+
+        # ── Swing screen: momentum + liquidity, any asset type ──
+        reasons: list[str] = []
+        if (
+            signal in {"Bullish", "Neutral"}
+            and conf >= 4
+            and volume >= 300_000
+            and rsi is not None
+            and 48 <= rsi <= 72
+            and sma20 is not None
+            and price > sma20
+        ):
+            score = conf * 12.0
+            reasons.append(f"{conf}/6 trend checks pass")
+            if sma50 is not None and price > sma50:
+                score += 10
+                reasons.append("Above SMA-20 & SMA-50")
+            else:
+                reasons.append("Above SMA-20")
+            if change_5d is not None and change_5d > 0:
+                score += min(change_5d, 15)
+                reasons.append(f"+{change_5d:.1f}% over 5d")
+            if 52 <= rsi <= 66:
+                score += 8
+            reasons.append(f"RSI {rsi:.0f}")
+            if volume >= 2_000_000:
+                score += 8
+            reasons.append(f"{volume/1e6:.1f}M volume")
+            if tech.get("trend_cross") == "Golden cross":
+                score += 6
+                reasons.append("Recent golden cross")
+            swing.append(
+                IdeaItem(
+                    ticker=row.ticker, name=row.name, asset_type=row.asset_type,
+                    current_price=row.current_price, change_1d_pct=change_1d,
+                    change_5d_pct=change_5d, upside_pct=row.upside_pct,
+                    opportunity_score=row.opportunity_score, signal=signal, rsi14=rsi,
+                    confidence_grade=row.confidence_grade, risk_level=row.risk_level,
+                    idea_score=round(score, 1), reasons=reasons[:5],
+                )
+            )
+
+        # ── Long-term screen: quality fundamentals + long-term uptrend ──
+        fundamentals = row.fundamentals or {}
+        margins = fundamentals.get("margins") or {}
+        cagr = _num(fundamentals.get("revenue_cagr_pct"))
+        if (
+            row.asset_type == "Stock"
+            and row.qualification != "Technical Screen Only"
+            and row.confidence_grade in {"A", "B"}
+            and (row.free_cash_flow or 0) > 0
+            and (row.net_income or 0) > 0
+            and sma200 is not None
+            and price > sma200
+        ):
+            lreasons: list[str] = [f"Confidence {row.confidence_grade}"]
+            score = float(row.opportunity_score)
+            score += 20 if row.confidence_grade == "A" else 10
+            lreasons.append("Positive net income & free cash flow")
+            score += 10
+            lreasons.append("Price above SMA-200 (long uptrend)")
+            score += 8
+            if row.revenue_growth_pct and row.revenue_growth_pct > 5:
+                score += min(row.revenue_growth_pct / 2, 12)
+                lreasons.append(f"Revenue +{row.revenue_growth_pct:.0f}% YoY")
+            if isinstance(cagr, float) and cagr > 8:
+                score += 6
+                lreasons.append(f"{cagr:.0f}% revenue CAGR")
+            op_margin = _num(margins.get("operating_pct"))
+            if op_margin is not None and op_margin >= 15:
+                score += 6
+                lreasons.append(f"{op_margin:.0f}% operating margin")
+            if row.risk_level == "Low":
+                score += 6
+                lreasons.append("Low risk grade")
+            long_term.append(
+                IdeaItem(
+                    ticker=row.ticker, name=row.name, asset_type=row.asset_type,
+                    current_price=row.current_price, change_1d_pct=change_1d,
+                    change_5d_pct=change_5d, upside_pct=row.upside_pct,
+                    opportunity_score=row.opportunity_score, signal=signal, rsi14=rsi,
+                    confidence_grade=row.confidence_grade, risk_level=row.risk_level,
+                    idea_score=round(score, 1), reasons=lreasons[:5],
+                )
+            )
+
+    swing.sort(key=lambda item: item.idea_score, reverse=True)
+    long_term.sort(key=lambda item: item.idea_score, reverse=True)
+    return IdeasResponse(swing=swing[:limit], long_term=long_term[:limit])
 
 
 @router.get("/compare", response_model=list[AnalysisRead])

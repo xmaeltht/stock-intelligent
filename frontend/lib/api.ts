@@ -198,3 +198,22 @@ export async function fetchWatchlistTickers(): Promise<Set<string>> {
 export async function toggleWatch(ticker: string, watched: boolean): Promise<void> {
   await fetch(`/api/research/watchlist/${ticker}`, { method: watched ? "DELETE" : "POST" });
 }
+
+export type IdeaItem = {
+  ticker: string;
+  name: string;
+  asset_type: string;
+  current_price: string;
+  change_1d_pct: number | null;
+  change_5d_pct: number | null;
+  upside_pct: number | null;
+  opportunity_score: number;
+  signal: string | null;
+  rsi14: number | null;
+  confidence_grade: string;
+  risk_level: string;
+  idea_score: number;
+  reasons: string[];
+};
+
+export type IdeasResponse = { swing: IdeaItem[]; long_term: IdeaItem[] };

@@ -124,3 +124,25 @@ class WatchlistItem(BaseModel):
     note: str | None
     created_at: datetime
     latest: AnalysisListItem | None
+
+
+class IdeaItem(BaseModel):
+    ticker: str
+    name: str
+    asset_type: str
+    current_price: Decimal
+    change_1d_pct: float | None
+    change_5d_pct: float | None
+    upside_pct: float | None
+    opportunity_score: int
+    signal: str | None
+    rsi14: float | None
+    confidence_grade: str
+    risk_level: str
+    idea_score: float
+    reasons: list[str]
+
+
+class IdeasResponse(BaseModel):
+    swing: list[IdeaItem]
+    long_term: list[IdeaItem]

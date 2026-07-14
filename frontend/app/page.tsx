@@ -18,7 +18,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [analyses, setAnalyses] = useState<ListItem[]>([]);
   const [watched, setWatched] = useState<Set<string>>(new Set());
-  const [minimum, setMinimum] = useState(95);
+  const [minimum, setMinimum] = useState(-100);
   const [maxPrice, setMaxPrice] = useState(0);
   const [minVolume, setMinVolume] = useState(0);
   const [signal, setSignal] = useState("all");
@@ -242,11 +242,17 @@ export default function Dashboard() {
           </button>
         </div>
 
-        <p className="notice" style={{ marginTop: 0 }}>
-          {assetType === "ETF"
-            ? "ETF mode ranks transparent trend and liquidity signals. It does not invent a corporate fair value for a fund."
-            : "Technical confirmation supports timing, not the fair-value calculation. Open a stock for the full evidence trail."}
-        </p>
+        <div className="resultBar">
+          <span className="resultCount">
+            {loading ? "Loading…" : `${analyses.length}${analyses.length >= 250 ? "+" : ""} securities`}
+            {analyses.length >= 250 && <em> · showing top 250 — narrow filters or search to refine</em>}
+          </span>
+          <span className="resultHint">
+            {assetType === "ETF"
+              ? "ETFs ranked on trend & liquidity — no fabricated fair value."
+              : "Technical confirmation supports timing, not the fair-value calc."}
+          </span>
+        </div>
 
         {error && <div className="notice notice--error">{error}</div>}
         {!error && !loading && analyses.length === 0 && (

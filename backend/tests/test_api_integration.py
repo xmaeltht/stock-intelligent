@@ -201,3 +201,12 @@ def test_list_sorts_by_new_keys(client: TestClient) -> None:
         )
         assert response.status_code == 200, (key, response.text[:200])
         assert response.json(), key
+
+
+def test_ideas_endpoint_returns_two_lists(client: TestClient) -> None:
+    response = client.get("/api/v1/opportunities/ideas")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "swing" in payload and "long_term" in payload
+    assert isinstance(payload["swing"], list)
+    assert isinstance(payload["long_term"], list)

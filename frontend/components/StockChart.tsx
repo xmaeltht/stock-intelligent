@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PricePoint } from "../lib/api";
 
 const W = 1100;
@@ -13,10 +13,12 @@ const PAD_R = 14;
 const PAD_T = 12;
 
 const COLORS = {
-  price: "#3987e5",
-  sma20: "#199e70",
-  sma50: "#c98500",
-  bb: "#9085e9",
+  price: "#5aa2ff",
+  sma20: "#2fbf7f",
+  sma50: "#f0c05a",
+  sma100: "#a99bff",
+  sma200: "#ff8fa3",
+  bb: "#8a97a8",
   up: "#2fbf7f",
   down: "#e66767",
   neutral: "#5f6b7c",
@@ -67,15 +69,54 @@ const wilderRsiSeries = (closes: number[], period = 14): Array<number | null> =>
   return result;
 };
 
+type Overlay = "candles" | "sma20" | "sma50" | "sma100" | "sma200" | "bb" | "volume" | "rsi" | "macd";
+const DEFAULT_SHOW: Record<Overlay, boolean> = {
+  candles: true, sma20: true, sma50: true, sma100: false, sma200: true,
+  bb: true, volume: true, rsi: true, macd: true,
+};
+const INDICATORS: Array<{ key: Overlay; label: string; color?: string }> = [
+  { key: "candles", label: "Candles" },
+  { key: "sma20", label: "SMA 20", color: COLORS.sma20 },
+  { key: "sma50", label: "SMA 50", color: COLORS.sma50 },
+  { key: "sma100", label: "SMA 100", color: COLORS.sma100 },
+  { key: "sma200", label: "SMA 200", color: COLORS.sma200 },
+  { key: "bb", label: "Bollinger", color: COLORS.bb },
+  { key: "volume", label: "Volume", color: COLORS.volume },
+  { key: "rsi", label: "RSI" },
+  { key: "macd", label: "MACD" },
+];
+
 export default function StockChart({ history }: { history: PricePoint[] }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<{ index: number; px: number; py: number } | null>(null);
+  const [show, setShow] = useState<Record<Overlay, boolean>>(DEFAULT_SHOW);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("si.chart.overlays");
+      if (saved) setShow((current) => ({ ...current, ...JSON.parse(saved) }));
+    } catch {
+      /* ignore unavailable storage */
+    }
+  }, []);
+  const toggle = (key: Overlay) =>
+    setShow((current) => {
+      const next = { ...current, [key]: !current[key] };
+      try {
+        window.localStorage.setItem("si.chart.overlays", JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   const model = useMemo(() => {
     const closes = history.map((point) => Number(point.close));
     const hasOhlc = history.filter((point) => point.high != null && point.low != null && point.open != null).length > history.length * 0.8;
     const sma20 = sma(closes, 20);
     const sma50 = sma(closes, 50);
+    const sma100 = sma(closes, 100);
+    const sma200 = sma(closes, 200);
     const bbUpper: Array<number | null> = closes.map((_, index) => {
       if (index + 1 < 20) return null;
       const window = closes.slice(index - 19, index + 1);
@@ -115,6 +156,8 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
       hasOhlc,
       sma20,
       sma50,
+      sma100,
+      sma200,
       bbUpper,
       bbLower,
       macd,
@@ -189,21 +232,29 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
 
   const hovered = hover ? history[hover.index] : null;
 
+  const canCandles = model.hasOhlc && show.candles;
+
   return (
     <div className="chartShell">
-      <div className="chartLegend">
-        <span><i style={{ background: COLORS.price }} /> {model.hasOhlc ? "OHLC candles" : "Close"}</span>
-        <span><i style={{ background: COLORS.sma20 }} /> SMA 20</span>
-        <span><i style={{ background: COLORS.sma50 }} /> SMA 50</span>
-        <span><i style={{ background: COLORS.bb }} /> Bollinger (20, 2)</span>
-        <span><i style={{ background: COLORS.volume }} /> Volume</span>
+      <div className="indicatorPicker">
+        {INDICATORS.map((ind) => (
+          <button
+            key={ind.key}
+            className={`indChip${show[ind.key] ? " on" : ""}`}
+            onClick={() => toggle(ind.key)}
+            aria-pressed={show[ind.key]}
+          >
+            {ind.color && <i style={{ background: ind.color }} />}
+            {ind.label}
+          </button>
+        ))}
       </div>
       <div className="chartWrap" ref={wrapRef}>
         <svg
           className="stockChart"
           viewBox={`0 0 ${W} ${PRICE_H + VOL_H}`}
           role="img"
-          aria-label="One year price chart with moving averages, Bollinger bands, and volume"
+          aria-label="One year price chart with selectable moving averages, Bollinger bands, and volume"
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
         >
@@ -213,10 +264,10 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
               <text x={PAD_L - 8} y={y(tick) + 3} textAnchor="end">${tick >= 100 ? tick.toFixed(0) : tick.toFixed(2)}</text>
             </g>
           ))}
-          {bandPath && <path d={bandPath} fill="#9085e912" stroke="none" />}
-          <polyline points={line(model.bbUpper)} fill="none" stroke={COLORS.bb} strokeWidth="1" strokeDasharray="3 4" opacity="0.7" />
-          <polyline points={line(model.bbLower)} fill="none" stroke={COLORS.bb} strokeWidth="1" strokeDasharray="3 4" opacity="0.7" />
-          {history.map((point, index) => {
+          {show.bb && bandPath && <path d={bandPath} fill="#8a97a815" stroke="none" />}
+          {show.bb && <polyline points={line(model.bbUpper)} fill="none" stroke={COLORS.bb} strokeWidth="1" strokeDasharray="3 4" opacity="0.7" />}
+          {show.bb && <polyline points={line(model.bbLower)} fill="none" stroke={COLORS.bb} strokeWidth="1" strokeDasharray="3 4" opacity="0.7" />}
+          {show.volume && history.map((point, index) => {
             const barHeight = ((point.volume ?? 0) / model.maxVolume) * (VOL_H - 8);
             const upDay = index > 0 && model.closes[index] >= model.closes[index - 1];
             return (
@@ -230,7 +281,7 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
               />
             );
           })}
-          {model.hasOhlc
+          {canCandles
             ? history.map((point, index) => {
                 const open = Number(point.open ?? point.close);
                 const close = model.closes[index];
@@ -246,8 +297,10 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
                 );
               })
             : <polyline points={line(model.closes.map((value) => value))} fill="none" stroke={COLORS.price} strokeWidth="2" strokeLinejoin="round" />}
-          <polyline points={line(model.sma20)} fill="none" stroke={COLORS.sma20} strokeWidth="1.6" />
-          <polyline points={line(model.sma50)} fill="none" stroke={COLORS.sma50} strokeWidth="1.6" />
+          {show.sma200 && <polyline points={line(model.sma200)} fill="none" stroke={COLORS.sma200} strokeWidth="1.8" opacity="0.95" />}
+          {show.sma100 && <polyline points={line(model.sma100)} fill="none" stroke={COLORS.sma100} strokeWidth="1.6" opacity="0.9" />}
+          {show.sma50 && <polyline points={line(model.sma50)} fill="none" stroke={COLORS.sma50} strokeWidth="1.5" />}
+          {show.sma20 && <polyline points={line(model.sma20)} fill="none" stroke={COLORS.sma20} strokeWidth="1.5" />}
           {dateTickIndexes.map((index) => (
             <text key={`date-${index}`} x={x(index)} y={PRICE_H + VOL_H - 2} textAnchor={index === 0 ? "start" : index === count - 1 ? "end" : "middle"} className="axisLabel">
               {history[index].date}
@@ -277,8 +330,10 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
         )}
       </div>
 
+      {show.rsi && (
+      <>
       <div className="chartLegend" style={{ marginTop: 10 }}>
-        <span><i style={{ background: COLORS.bb }} /> RSI 14 (Wilder)</span>
+        <span><i style={{ background: COLORS.sma100 }} /> RSI 14 (Wilder)</span>
         <span className="dim">70 overbought · 30 oversold</span>
       </div>
       <svg className="stockChart" viewBox={`0 0 ${W} ${RSI_H}`} role="img" aria-label="RSI 14 oscillator">
@@ -288,15 +343,19 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
             <text x={PAD_L - 8} y={rsiY(level) + 3} textAnchor="end">{level}</text>
           </g>
         ))}
-        <rect x={PAD_L} y={rsiY(70)} width={W - PAD_L - PAD_R} height={rsiY(30) - rsiY(70)} fill="#3987e50a" />
+        <rect x={PAD_L} y={rsiY(70)} width={W - PAD_L - PAD_R} height={rsiY(30) - rsiY(70)} fill="#5aa2ff0f" />
         <polyline
           points={model.rsi.map((value, index) => (value === null ? null : `${x(index).toFixed(1)},${rsiY(value).toFixed(1)}`)).filter(Boolean).join(" ")}
           fill="none"
-          stroke={COLORS.bb}
+          stroke={COLORS.sma100}
           strokeWidth="1.6"
         />
       </svg>
+      </>
+      )}
 
+      {show.macd && (
+      <>
       <div className="chartLegend" style={{ marginTop: 10 }}>
         <span>Impulse MACD (12, 26, 9)</span>
         <span style={{ color: COLORS.up }}>Bullish impulse</span>
@@ -325,6 +384,8 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
         <text x={PAD_L} y={12}>MACD {model.macd.at(-1)?.toFixed(3)}</text>
         <text x={W - PAD_R} y={12} textAnchor="end">Signal {model.macdSignal.at(-1)?.toFixed(3)}</text>
       </svg>
+      </>
+      )}
     </div>
   );
 }
