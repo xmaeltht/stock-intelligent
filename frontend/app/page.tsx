@@ -15,6 +15,7 @@ import {
   timeAgo,
   toggleWatch,
   type ListItem,
+  type SectorsResponse,
   type Summary,
 } from "../lib/api";
 
@@ -32,6 +33,8 @@ export default function Dashboard() {
   const [sortOrder, setSortOrder] = useState("desc");
   const [search, setSearch] = useState("");
   const [assetType, setAssetType] = useState("Stock");
+  const [sector, setSector] = useState("all");
+  const [sectors, setSectors] = useState<SectorsResponse | null>(null);
   const [watchedOnly, setWatchedOnly] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -53,6 +56,7 @@ export default function Dashboard() {
         ...(signal !== "all" ? { signal } : {}),
         ...(watchedOnly ? { watched_only: "true" } : {}),
         ...(search ? { search } : {}),
+        ...(sector !== "all" ? { sector } : {}),
         sort_by: sortBy,
         sort_order: sortOrder,
         limit: "250",
@@ -92,8 +96,15 @@ export default function Dashboard() {
         }
       }
     },
-    [minimum, maxPrice, minVolume, signal, sortBy, sortOrder, search, assetType, watchedOnly],
+    [minimum, maxPrice, minVolume, signal, sortBy, sortOrder, search, sector, assetType, watchedOnly],
   );
+
+  // Load the sector list (with counts) for the sector filter.
+  useEffect(() => {
+    getJson<SectorsResponse>(`/api/research/opportunities/sectors?asset_type=${assetType}`)
+      .then(setSectors)
+      .catch(() => setSectors(null));
+  }, [assetType]);
 
   // Reload on any filter change (with the loading state).
   useEffect(() => {
@@ -249,6 +260,17 @@ export default function Dashboard() {
             />
           </label>
           <label>
+            Sector
+            <select value={sector} onChange={(event) => setSector(event.target.value)}>
+              <option value="all">All sectors</option>
+              {sectors?.sectors.map((entry) => (
+                <option key={entry.sector} value={entry.sector}>
+                  {entry.sector} ({entry.count.toLocaleString()})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             Min upside
             <select value={minimum} disabled={assetType === "ETF"} onChange={(event) => setMinimum(Number(event.target.value))}>
               <option value={-100}>All analyzed</option>
@@ -393,6 +415,15 @@ export default function Dashboard() {
                         <strong>{item.company.ticker}</strong>
                         <span>{item.company.name}</span>
                       </Link>
+                      {item.company.sector && (
+                        <button
+                          className="sectorTag"
+                          title={`Filter by ${item.company.sector}`}
+                          onClick={() => setSector(item.company.sector as string)}
+                        >
+                          {item.company.sector}
+                        </button>
+                      )}
                     </td>
                     <td className="r num priceCell">
                       <i className={`freshDot${fresh ? " live" : ""}`} title={`Updated ${timeAgo(item.price_as_of ?? item.as_of, nowMs)} ago`} />

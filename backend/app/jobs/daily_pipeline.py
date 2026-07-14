@@ -10,6 +10,7 @@ from urllib.error import HTTPError
 from sqlalchemy import func, or_, select
 
 from app.analysis.etf import build_etf_analysis, build_technical_screen
+from app.analysis.sectors import classify_sector
 from app.analysis.technicals import build_technical_indicators
 from app.analysis.valuation import EMPTY_FINANCIALS, build_analysis
 from app.core.config import get_settings
@@ -100,6 +101,18 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
         company = session.scalar(select(Company).where(Company.ticker == symbol))
         if company is None or (company.cik is None and company.asset_type != "ETF"):
             raise ValueError(f"{symbol} is absent from the SEC company universe")
+
+        # Resolve the sector once (cheap, cached) so securities can be grouped.
+        if company.sector is None:
+            try:
+                if company.asset_type == "ETF":
+                    company.sector = classify_sector("ETF", name=company.name)
+                elif company.cik:
+                    submission = sec.company_submission(company.cik)
+                    company.industry = submission.get("sicDescription") or company.industry
+                    company.sector = classify_sector("Stock", sic=submission.get("sic"))
+            except Exception:  # noqa: BLE001 - sector is best-effort metadata
+                logger.warning("sector resolution failed for %s", symbol)
 
         quote = prices.latest_price(symbol, company.asset_type)
         indicators = build_technical_indicators(quote.history)

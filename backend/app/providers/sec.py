@@ -8,6 +8,7 @@ from app.providers.http import RateLimiter, fetch_bytes, fetch_json
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
 SEC_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 NASDAQ_TRADED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqtraded.txt"
 
 # SEC fair-access guideline is 10 requests/second; stay well under it even
@@ -106,6 +107,15 @@ class SecProvider:
             SEC_FACTS_URL.format(cik=cik.zfill(10)),
             self.user_agent,
             self.cache_dir / "sec" / "companyfacts" / f"CIK{cik.zfill(10)}.json",
+        )
+
+    def company_submission(self, cik: str) -> dict:
+        """Filer metadata (includes SIC code and description for sector mapping)."""
+        SEC_LIMITER.wait()
+        return fetch_json(
+            SEC_SUBMISSIONS_URL.format(cik=cik.zfill(10)),
+            self.user_agent,
+            self.cache_dir / "sec" / "submissions" / f"CIK{cik.zfill(10)}.json",
         )
 
 

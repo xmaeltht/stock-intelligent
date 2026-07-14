@@ -340,6 +340,12 @@ tr.flash--down td { animation: flashDown 1.1s ease-out; }
 .spark { display: block; }
 .sparkEmpty { font: 600 11px var(--mono); }
 
+/* sector tag under company name */
+.sectorTag { display: inline-block; margin-top: 3px; padding: 2px 8px; border-radius: 6px;
+  border: 1px solid var(--glass-border); background: var(--glass); color: var(--faint);
+  font: 600 10px var(--sans); letter-spacing: .02em; cursor: pointer; transition: all .15s; }
+.sectorTag:hover { color: var(--text); border-color: var(--glass-border-2); background: var(--glass-2); }
+
 /* ── rules-based rating badge ── */
 .ratingBadge { display: inline-flex; align-items: center; justify-content: center; gap: 5px;
   padding: 4px 10px; border-radius: 999px; font: 700 11px var(--sans); letter-spacing: .02em;

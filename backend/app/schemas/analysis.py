@@ -10,6 +10,7 @@ class CompanyBrief(BaseModel):
     name: str
     exchange: str | None
     asset_type: str
+    sector: str | None = None
 
 
 class AnalysisListItem(BaseModel):
@@ -117,6 +118,7 @@ class MarketOverview(BaseModel):
     upside_distribution: list[DistributionBucket]
     exchange_counts: dict[str, int]
     asset_type_counts: dict[str, int]
+    sector_counts: dict[str, int]
     top_gainers: list[MoverItem]
     top_losers: list[MoverItem]
     most_active: list[MoverItem]

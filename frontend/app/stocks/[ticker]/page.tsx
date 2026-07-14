@@ -197,7 +197,8 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
         <div className="stockHead">
           <div>
             <span className="eyebrow">
-              {data.company.exchange ?? "US listed"} · {data.company.asset_type} · {data.qualification}
+              {data.company.exchange ?? "US listed"} · {data.company.asset_type}
+              {data.company.sector ? ` · ${data.company.sector}` : ""} · {data.qualification}
             </span>
             <h1>{data.company.ticker}</h1>
             <p className="companyName">{data.company.name}</p>

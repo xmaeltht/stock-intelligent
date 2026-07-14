@@ -181,6 +181,7 @@ def opportunities(
     signal: Literal["all", "Bullish", "Neutral", "Bearish"] = "all",
     watched_only: bool = False,
     search: Annotated[str | None, Query(max_length=100)] = None,
+    sector: Annotated[str | None, Query(max_length=64)] = None,
     asset_type: Literal["all", "Stock", "ETF"] = "Stock",
     sort_by: Literal[
         "rating",
@@ -216,6 +217,8 @@ def opportunities(
         filters.append(StockAnalysis.upside_pct <= IMPLAUSIBLE_UPSIDE_PCT)
     if asset_type != "all" and not search:
         filters.append(Company.asset_type == asset_type)
+    if sector and not search:
+        filters.append(Company.sector == sector)
     if min_price is not None:
         filters.append(StockAnalysis.current_price >= min_price)
     if max_price is not None:
@@ -287,6 +290,30 @@ def opportunities(
     return list(db.scalars(statement))
 
 
+@router.get("/sectors")
+def sectors(
+    db: Annotated[Session, Depends(get_db)],
+    asset_type: Literal["all", "Stock", "ETF"] = "all",
+) -> dict:
+    """Analyzed-security counts grouped by sector, for the sector filter/grouping."""
+    settings = get_settings()
+    conditions = [StockAnalysis.id.in_(latest_ids()), *eligible_conditions(settings)]
+    if asset_type != "all":
+        conditions.append(Company.asset_type == asset_type)
+    rows = db.execute(
+        select(Company.sector, func.count())
+        .join(StockAnalysis, StockAnalysis.company_id == Company.id)
+        .where(*conditions)
+        .group_by(Company.sector)
+    ).all()
+    groups = [
+        {"sector": sector or "Unclassified", "count": count}
+        for sector, count in rows
+    ]
+    groups.sort(key=lambda item: item["count"], reverse=True)
+    return {"sectors": groups, "total": sum(item["count"] for item in groups)}
+
+
 @router.get("/overview", response_model=MarketOverview)
 def market_overview(db: Annotated[Session, Depends(get_db)]) -> MarketOverview:
     settings = get_settings()
@@ -296,6 +323,7 @@ def market_overview(db: Annotated[Session, Depends(get_db)]) -> MarketOverview:
             Company.name,
             Company.asset_type,
             Company.exchange,
+            Company.sector,
             StockAnalysis.current_price,
             StockAnalysis.upside_pct,
             StockAnalysis.opportunity_score,
@@ -313,6 +341,7 @@ def market_overview(db: Annotated[Session, Depends(get_db)]) -> MarketOverview:
     impulse_breadth: Counter[str] = Counter()
     exchange_counts: Counter[str] = Counter()
     asset_type_counts: Counter[str] = Counter()
+    sector_counts: Counter[str] = Counter()
     score_buckets = [0] * 10
     upside_labels = ["Below 0%", "0-50%", "50-100%", "100-200%", "200%+"]
     upside_buckets = [0] * len(upside_labels)
@@ -324,6 +353,7 @@ def market_overview(db: Annotated[Session, Depends(get_db)]) -> MarketOverview:
         impulse_breadth[str(indicators.get("impulse_macd") or "Pending")] += 1
         exchange_counts[row.exchange or "Unknown"] += 1
         asset_type_counts[row.asset_type] += 1
+        sector_counts[row.sector or "Unclassified"] += 1
         score_buckets[min(9, max(0, row.opportunity_score // 10))] += 1
         if row.asset_type == "Stock" and row.upside_pct <= IMPLAUSIBLE_UPSIDE_PCT:
             upside = row.upside_pct
@@ -366,6 +396,7 @@ def market_overview(db: Annotated[Session, Depends(get_db)]) -> MarketOverview:
         ],
         exchange_counts=dict(exchange_counts),
         asset_type_counts=dict(asset_type_counts),
+        sector_counts=dict(sector_counts),
         top_gainers=sorted(with_change, key=lambda item: item.change_1d_pct, reverse=True)[:8],
         top_losers=sorted(with_change, key=lambda item: item.change_1d_pct)[:8],
         most_active=sorted(with_volume, key=lambda item: item.volume, reverse=True)[:8],

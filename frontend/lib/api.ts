@@ -3,7 +3,11 @@ export type CompanyBrief = {
   name: string;
   exchange: string | null;
   asset_type: string;
+  sector?: string | null;
 };
+
+export type SectorCount = { sector: string; count: number };
+export type SectorsResponse = { sectors: SectorCount[]; total: number };
 
 export type TechnicalIndicators = {
   sma20?: number | null;
@@ -162,6 +166,7 @@ export type Overview = {
   upside_distribution: Array<{ label: string; count: number }>;
   exchange_counts: Record<string, number>;
   asset_type_counts: Record<string, number>;
+  sector_counts: Record<string, number>;
   top_gainers: Mover[];
   top_losers: Mover[];
   most_active: Mover[];
