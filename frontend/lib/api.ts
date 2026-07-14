@@ -35,6 +35,7 @@ export type TechnicalIndicators = {
   macd_signal?: number;
   macd_histogram?: number;
   impulse_macd?: string;
+  spark?: number[];
 };
 
 export type Catalyst = { category?: string; title: string; detail: string; status: string };
@@ -42,6 +43,7 @@ export type Catalyst = { category?: string; title: string; detail: string; statu
 export type ListItem = {
   company: CompanyBrief;
   as_of: string;
+  price_as_of: string | null;
   price_date: string;
   current_price: string;
   volume: number | null;
@@ -88,6 +90,7 @@ export type Fundamentals = {
 };
 
 export type Detail = ListItem & {
+  price_as_of: string | null;
   price_history: PricePoint[];
   revenue: string | null;
   revenue_growth_pct: number | null;
@@ -114,6 +117,10 @@ export type Summary = {
   coverage_pct: number;
   qualified_count: number;
   last_analysis_at: string | null;
+  market_open: boolean;
+  prices_updated_last_min: number;
+  analyses_last_5min: number;
+  newest_price_at: string | null;
 };
 
 export type HistoryPoint = {
@@ -183,6 +190,72 @@ export const pct = (value: number | null | undefined, digits = 1) =>
 
 export const signalClass = (signal?: string | null) =>
   `chip chip--${(signal ?? "neutral").toLowerCase()}`;
+
+// Short "updated Xs ago" style label from an ISO timestamp.
+export const timeAgo = (iso: string | null | undefined, nowMs = Date.now()): string => {
+  if (!iso) return "—";
+  const seconds = Math.max(0, Math.round((nowMs - Date.parse(iso)) / 1000));
+  if (seconds < 5) return "now";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+};
+
+// A quote refreshed within the last few minutes is considered "live".
+export const isFresh = (iso: string | null | undefined, nowMs = Date.now(), windowSec = 180) =>
+  !!iso && nowMs - Date.parse(iso) <= windowSec * 1000;
+
+export type Rating = "Strong Buy" | "Buy" | "Accumulate" | "Hold" | "Reduce" | "Sell";
+
+const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+
+/**
+ * Deterministic, transparent action rating blending modeled upside (when a
+ * fundamental fair value exists), the technical signal, trend cross, RSI, risk,
+ * and opportunity score. This is a rules-based screen output, not personalized
+ * investment advice.
+ */
+export function ratingFor(opts: {
+  upsidePct?: number | null;
+  technicalOnly: boolean;
+  signal?: string | null;
+  rsi?: number | null;
+  risk?: string | null;
+  score?: number | null;
+  trendCross?: string | null;
+}): { label: Rating; slug: string } {
+  let points = 0;
+  const signal = (opts.signal ?? "").toLowerCase();
+  if (signal === "bullish") points += 2;
+  else if (signal === "bearish") points -= 2;
+
+  if (!opts.technicalOnly && opts.upsidePct != null) {
+    points += clamp(opts.upsidePct / 20, -3, 4);
+  }
+  if (opts.trendCross === "Golden cross") points += 1;
+  else if (opts.trendCross === "Death cross") points -= 1;
+
+  if (opts.rsi != null) {
+    if (opts.rsi >= 78) points -= 1; // overbought — accumulate on pullbacks, not chase
+    else if (opts.rsi <= 30) points += 1; // oversold bounce potential
+    else if (opts.rsi >= 45 && opts.rsi <= 68) points += 0.5;
+  }
+  if (opts.risk === "Low") points += 0.5;
+  else if (opts.risk === "High") points -= 0.5;
+  if (opts.score != null) points += clamp((opts.score - 50) / 25, -2, 2);
+
+  const label: Rating =
+    points >= 4 ? "Strong Buy"
+    : points >= 2 ? "Buy"
+    : points >= 0.75 ? "Accumulate"
+    : points > -0.75 ? "Hold"
+    : points > -2.25 ? "Reduce"
+    : "Sell";
+  return { label, slug: label.toLowerCase().replace(/\s+/g, "") };
+}
 
 export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });

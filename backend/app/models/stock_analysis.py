@@ -27,6 +27,11 @@ class StockAnalysis(Base):
         ForeignKey("companies.id", ondelete="CASCADE"), index=True
     )
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    # Last time the fast live-quote loop refreshed current_price (null until the
+    # first intraday refresh; falls back to as_of for display).
+    price_as_of: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     price_date: Mapped[date] = mapped_column(Date)
     current_price: Mapped[Decimal] = mapped_column(Numeric(20, 4))
     volume: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)

@@ -1,5 +1,6 @@
 import re
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session, aliased, joinedload, load_only
 from app.analysis.valuation import IMPLAUSIBLE_UPSIDE_PCT
 from app.core.config import get_settings
 from app.db.session import get_db
+from app.jobs.live_quotes import is_market_open
 from app.models.company import Company
 from app.models.stock_analysis import StockAnalysis
 from app.schemas.analysis import (
@@ -28,6 +30,7 @@ router = APIRouter()
 LIST_COLUMNS = (
     StockAnalysis.company_id,
     StockAnalysis.as_of,
+    StockAnalysis.price_as_of,
     StockAnalysis.price_date,
     StockAnalysis.current_price,
     StockAnalysis.volume,
@@ -107,6 +110,20 @@ def build_summary(db: Session) -> DashboardSummary:
         )
         or 0,
         last_analysis_at=db.scalar(select(func.max(StockAnalysis.as_of))),
+        market_open=is_market_open(),
+        prices_updated_last_min=db.scalar(
+            select(func.count())
+            .select_from(StockAnalysis)
+            .where(StockAnalysis.price_as_of >= datetime.now(UTC) - timedelta(minutes=1))
+        )
+        or 0,
+        analyses_last_5min=db.scalar(
+            select(func.count())
+            .select_from(Company)
+            .where(Company.analysis_attempted_at >= datetime.now(UTC) - timedelta(minutes=5))
+        )
+        or 0,
+        newest_price_at=db.scalar(select(func.max(StockAnalysis.price_as_of))),
     )
 
 

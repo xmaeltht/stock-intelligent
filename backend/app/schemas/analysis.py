@@ -18,6 +18,7 @@ class AnalysisListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     company: CompanyBrief
     as_of: datetime
+    price_as_of: datetime | None = None
     price_date: date
     current_price: Decimal
     volume: int | None
@@ -35,6 +36,7 @@ class AnalysisRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     company: CompanyBrief
     as_of: datetime
+    price_as_of: datetime | None = None
     price_date: date
     current_price: Decimal
     volume: int | None
@@ -83,6 +85,11 @@ class DashboardSummary(BaseModel):
     coverage_pct: float
     qualified_count: int
     last_analysis_at: datetime | None
+    # Live-scan telemetry so the UI can show the analyzers are running non-stop.
+    market_open: bool = False
+    prices_updated_last_min: int = 0
+    analyses_last_5min: int = 0
+    newest_price_at: datetime | None = None
 
 
 class MoverItem(BaseModel):

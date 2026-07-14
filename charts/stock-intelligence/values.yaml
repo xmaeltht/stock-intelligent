@@ -70,11 +70,25 @@ config:
   analysisBatchSize: 500
   analysisRetryHours: 6
   analysisWorkers: 4
-  analysisRefreshHours: 24
+  # Re-analyze each security roughly every 8h so the deep model keeps running
+  # non-stop rather than idling once the universe is covered.
+  analysisRefreshHours: 8
   analysisLoopDelaySeconds: 5
   analysisIdleSeconds: 300
   universeRefreshHours: 24
   analysisExchanges: "Nasdaq,NYSE,NYSE American,NYSE Arca,Cboe BZX"
+  # Fast intraday price loop — refreshes current price / 1D move far more often
+  # than the deep loop so the screener updates near-live during market hours.
+  liveQuotesEnabled: true
+  liveQuoteIntervalSeconds: 45
+  liveQuoteOffhoursSeconds: 900
+  liveQuoteBatchSize: 240
+  liveQuoteChunkSize: 40
+  liveFreshSeconds: 180
+  # Run the analyzer loops inside the backend so scanning never stops. If you run
+  # a dedicated continuous-analyzer pod instead, set backendRunDeepLoop false.
+  backendRunLiveLoop: true
+  backendRunDeepLoop: true
 
 secrets:
   # For GitOps, create this Secret out-of-band and set existingSecret.

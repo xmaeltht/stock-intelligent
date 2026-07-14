@@ -29,6 +29,17 @@ class PriceQuote:
     source_url: str
 
 
+@dataclass(frozen=True)
+class LiveQuote:
+    """A lightweight intraday snapshot for the fast refresh loop."""
+
+    symbol: str
+    price: Decimal
+    volume: int | None
+    change_pct: float | None
+    source: str
+
+
 def _clean_number(raw: object) -> float | None:
     text = str(raw or "").replace("$", "").replace(",", "").strip()
     if not text or text in {"N/A", "--"}:
@@ -54,7 +65,104 @@ def _quote_from_history(
     )
 
 
+def _stooq_batch_symbol(ticker: str) -> str:
+    # Stooq uses dashes for share classes and a `.us` suffix (BRK-B -> brk-b.us).
+    return f"{ticker.lower().replace('.', '-')}.us"
+
+
+def parse_stooq_light(payload: str, symbol_map: dict[str, str]) -> list["LiveQuote"]:
+    """Parse a Stooq light-quote CSV batch. `symbol_map` maps the request symbol
+    (e.g. `aapl.us`) back to our canonical ticker."""
+    quotes: list[LiveQuote] = []
+    for row in csv.DictReader(io.StringIO(payload)):
+        request_symbol = str(row.get("Symbol") or "").strip().lower()
+        ticker = symbol_map.get(request_symbol)
+        if ticker is None:
+            continue
+        close = _clean_number(row.get("Close"))
+        if close is None or close <= 0:
+            continue
+        raw_volume = str(row.get("Volume") or "").split(".")[0]
+        quotes.append(
+            LiveQuote(
+                symbol=ticker,
+                price=Decimal(str(close)),
+                volume=int(raw_volume) if raw_volume.isdigit() else None,
+                change_pct=None,  # computed by the loop from stored prior close
+                source="stooq",
+            )
+        )
+    return quotes
+
+
+def parse_yahoo_quote(payload: dict) -> list["LiveQuote"]:
+    results = ((payload or {}).get("quoteResponse") or {}).get("result") or []
+    quotes: list[LiveQuote] = []
+    for item in results:
+        symbol = str(item.get("symbol") or "").upper()
+        price = item.get("regularMarketPrice")
+        if not symbol or not isinstance(price, int | float) or price <= 0:
+            continue
+        change = item.get("regularMarketChangePercent")
+        volume = item.get("regularMarketVolume")
+        quotes.append(
+            LiveQuote(
+                symbol=symbol,
+                price=Decimal(str(price)),
+                volume=int(volume) if isinstance(volume, int | float) else None,
+                change_pct=float(change) if isinstance(change, int | float) else None,
+                source="yahoo",
+            )
+        )
+    return quotes
+
+
 class NasdaqProvider:
+    def batch_quotes(self, symbols: list[str], chunk_size: int = 40) -> dict[str, "LiveQuote"]:
+        """Fetch lightweight intraday snapshots for many symbols per request.
+
+        Best-effort: tries a Stooq light-quote batch first (no auth, tolerant of
+        bulk access), then Yahoo's batch quote endpoint as a fallback. Any symbol
+        that can't be refreshed is simply omitted — the caller keeps its prior
+        value. Never raises for individual failures so the loop keeps running.
+        """
+        found: dict[str, LiveQuote] = {}
+        pending = [symbol.upper() for symbol in symbols if symbol]
+        for start in range(0, len(pending), chunk_size):
+            chunk = pending[start : start + chunk_size]
+            for quote in self._stooq_batch(chunk):
+                found.setdefault(quote.symbol, quote)
+            missing = [symbol for symbol in chunk if symbol not in found]
+            if missing:
+                for quote in self._yahoo_batch(missing):
+                    found.setdefault(quote.symbol, quote)
+        return found
+
+    def _stooq_batch(self, chunk: list[str]) -> list["LiveQuote"]:
+        symbol_map = {_stooq_batch_symbol(ticker): ticker for ticker in chunk}
+        joined = "+".join(symbol_map)
+        url = f"https://stooq.com/q/l/?s={joined}&f=sd2t2ohlcvn&h&e=csv"
+        request = Request(url, headers={"User-Agent": "Mozilla/5.0 StockIntelligence/0.2"})
+        try:
+            STOOQ_LIMITER.wait()
+            with urlopen(request, timeout=20) as response:  # noqa: S310 - fixed provider URL
+                payload = response.read().decode("utf-8", errors="replace")
+            return parse_stooq_light(payload, symbol_map)
+        except Exception:  # noqa: BLE001 - batch refresh is best-effort
+            return []
+
+    def _yahoo_batch(self, chunk: list[str]) -> list["LiveQuote"]:
+        joined = ",".join(chunk)
+        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={joined}"
+        request = Request(url, headers={"User-Agent": "Mozilla/5.0 StockIntelligence/0.2"})
+        try:
+            YAHOO_LIMITER.wait()
+            with urlopen(request, timeout=20) as response:  # noqa: S310 - fixed provider URL
+                payload = json.load(response)
+            return parse_yahoo_quote(payload)
+        except Exception:  # noqa: BLE001 - batch refresh is best-effort
+            return []
+
     def latest_price(self, symbol: str, asset_type: str = "Stock") -> PriceQuote:
         ticker = symbol.upper()
         # Yahoo's chart endpoint is the most tolerant of concurrent/bulk access

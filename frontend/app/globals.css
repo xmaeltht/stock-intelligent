@@ -308,6 +308,51 @@ tbody tr:last-child td { border-bottom: 0; }
   font: 500 11px var(--sans); letter-spacing: .01em; }
 .chartWrap { position: relative; margin-top: 12px; }
 
+/* ── live scanning strip ── */
+.liveStrip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin: 4px 0 16px;
+  padding: 11px 16px; border-radius: 14px; border: 1px solid var(--glass-border); background: var(--glass);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); font: 500 12.5px var(--sans); }
+.livePulse { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--muted); letter-spacing: .01em; }
+.livePulse i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.livePulse.open { color: var(--text); }
+.livePulse.open i { background: var(--bull-bright, #38e0a0); box-shadow: 0 0 0 0 rgba(56,224,160,.6); animation: livePing 1.8s ease-out infinite; }
+@keyframes livePing { 0% { box-shadow: 0 0 0 0 rgba(56,224,160,.5); } 70% { box-shadow: 0 0 0 7px rgba(56,224,160,0); } 100% { box-shadow: 0 0 0 0 rgba(56,224,160,0); } }
+.liveMetric { color: var(--muted); }
+.liveMetric b { color: var(--text); margin-right: 3px; }
+.liveToggle { margin-left: auto; }
+
+/* per-row freshness + flash */
+.priceCell { position: relative; }
+.freshDot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--faint);
+  margin-right: 7px; vertical-align: middle; }
+.freshDot.live { background: var(--bull-bright, #38e0a0); box-shadow: 0 0 6px rgba(56,224,160,.7); }
+.updatedCell { font: 500 11px var(--mono); white-space: nowrap; }
+tr.flash td { transition: background-color .15s ease; }
+tr.flash--up td { animation: flashUp 1.1s ease-out; }
+tr.flash--down td { animation: flashDown 1.1s ease-out; }
+@keyframes flashUp { 0% { background: rgba(56,224,160,.16); } 100% { background: transparent; } }
+@keyframes flashDown { 0% { background: rgba(255,122,122,.16); } 100% { background: transparent; } }
+.flashPrice { border-radius: 6px; }
+.flashPrice--up { animation: flashUp 1.1s ease-out; }
+.flashPrice--down { animation: flashDown 1.1s ease-out; }
+
+/* sparkline */
+.spark { display: block; }
+.sparkEmpty { font: 600 11px var(--mono); }
+
+/* ── rules-based rating badge ── */
+.ratingBadge { display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px; font: 700 11px var(--sans); letter-spacing: .02em;
+  white-space: nowrap; border: 1px solid transparent; }
+.ratingBadge--lg { padding: 7px 16px; font-size: 14px; border-radius: 12px; }
+.rating--strongbuy { color: #0b1512; background: linear-gradient(180deg, #5ff0b8, #2fcf90); box-shadow: 0 4px 14px -4px rgba(47,207,144,.6); }
+.rating--buy { color: var(--bull-bright, #38e0a0); background: rgba(56,224,160,.14); border-color: rgba(56,224,160,.35); }
+.rating--accumulate { color: #7fe3d0; background: rgba(90,210,190,.12); border-color: rgba(90,210,190,.3); }
+.rating--hold { color: var(--muted); background: var(--glass-2, rgba(255,255,255,.05)); border-color: var(--glass-border); }
+.rating--reduce { color: #f4c15d; background: rgba(244,193,93,.12); border-color: rgba(244,193,93,.32); }
+.rating--sell { color: var(--bear-bright, #ff7a7a); background: rgba(255,122,122,.13); border-color: rgba(255,122,122,.35); }
+.scenario--rating strong { margin-top: 4px; }
+
 /* detail two-column evidence */
 .detailGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
 .item { display: flex; justify-content: space-between; gap: 22px; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,.07); }

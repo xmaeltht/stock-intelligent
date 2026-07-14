@@ -1,5 +1,21 @@
 from decimal import Decimal
-from statistics import median
+from statistics import fmean, median
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+# Method-quality weights for the blended fair value. Cash-flow and earnings
+# anchors are more reliable than a top-line revenue multiple, which in turn beats
+# a pure book-value mark, so the blend leans on the stronger evidence.
+METHOD_WEIGHTS = {
+    "Free cash flow multiple": 1.3,
+    "Earnings multiple": 1.2,
+    "Operating income multiple": 1.1,
+    "Revenue multiple": 0.8,
+    "Book value multiple": 0.7,
+}
 
 # A deterministic multiple almost never implies more than a few hundred percent
 # upside for a real company. Anything beyond this is virtually always a
@@ -123,55 +139,89 @@ def build_analysis(financials: dict[str, object], price: Decimal) -> dict:
     if revenue is not None and previous_revenue and previous_revenue != 0:
         growth = float((revenue / previous_revenue - 1) * 100)
 
+    # Growth- and margin-aware multiples: a fast, high-margin compounder earns a
+    # richer multiple than a shrinking, low-margin business. Bounded so a single
+    # noisy input can't produce a runaway valuation.
+    growth_factor = _clamp(growth or 0.0, -20.0, 35.0)
+    net_margin_pct = (
+        float(net_income / revenue * 100)
+        if revenue and revenue > 0 and net_income is not None
+        else 0.0
+    )
+    margin_factor = _clamp(net_margin_pct, -20.0, 45.0)
+    rev_multiple = round(_clamp(1.2 + growth_factor * 0.06 + margin_factor * 0.03, 0.8, 4.5), 2)
+    fcf_multiple = round(_clamp(12.0 + growth_factor * 0.35, 8.0, 26.0), 1)
+    opinc_multiple = round(_clamp(10.0 + growth_factor * 0.25, 7.0, 20.0), 1)
+    earn_multiple = round(_clamp(14.0 + growth_factor * 0.4, 9.0, 30.0), 1)
+    book_multiple = 1.5
+    if equity and equity > 0 and net_income is not None:
+        roe = float(net_income / equity)
+        book_multiple = round(_clamp(1.0 + roe * 4.0, 0.8, 3.0), 2)
+
     methods: list[dict[str, object]] = []
     net_cash_per_share = Decimal("0")
     if shares and shares > 0:
         net_cash_per_share = (cash - debt) / shares
         if revenue and revenue > 0:
-            value = revenue * Decimal("2") / shares + net_cash_per_share
+            value = revenue * Decimal(str(rev_multiple)) / shares + net_cash_per_share
             if value > 0:
                 methods.append(
-                    {"model": "Revenue multiple", "value": float(_money(value)), "multiple": 2}
+                    {"model": "Revenue multiple", "value": float(_money(value)),
+                     "multiple": rev_multiple}
                 )
         if free_cash_flow and free_cash_flow > 0:
-            value = free_cash_flow * Decimal("15") / shares + net_cash_per_share
+            value = free_cash_flow * Decimal(str(fcf_multiple)) / shares + net_cash_per_share
             if value > 0:
                 methods.append(
                     {
                         "model": "Free cash flow multiple",
                         "value": float(_money(value)),
-                        "multiple": 15,
+                        "multiple": fcf_multiple,
                     }
                 )
         if operating_income and operating_income > 0:
-            value = operating_income * Decimal("12") / shares + net_cash_per_share
+            value = operating_income * Decimal(str(opinc_multiple)) / shares + net_cash_per_share
             if value > 0:
                 methods.append(
                     {
                         "model": "Operating income multiple",
                         "value": float(_money(value)),
-                        "multiple": 12,
+                        "multiple": opinc_multiple,
                     }
                 )
         if equity and equity > 0:
-            value = equity * Decimal("1.5") / shares
+            value = equity * Decimal(str(book_multiple)) / shares
             if value > 0:
                 methods.append(
                     {
                         "model": "Book value multiple",
                         "value": float(_money(value)),
-                        "multiple": 1.5,
+                        "multiple": book_multiple,
                     }
                 )
     if eps and eps > 0:
-        value = eps * Decimal("18")
+        value = eps * Decimal(str(earn_multiple))
         methods.append(
-            {"model": "Earnings multiple", "value": float(_money(value)), "multiple": 18}
+            {"model": "Earnings multiple", "value": float(_money(value)),
+             "multiple": earn_multiple}
         )
     if not methods:
         raise ValueError("Insufficient positive financial data for valuation")
 
-    fair_value = _money(Decimal(str(median([item["value"] for item in methods]))))
+    # Blend a robust median with a quality-weighted mean so reliable cash-flow /
+    # earnings anchors pull the fair value, while the median caps outlier influence.
+    values = [float(item["value"]) for item in methods]
+    weights = [METHOD_WEIGHTS.get(str(item["model"]), 1.0) for item in methods]
+    weighted_mean = sum(v * w for v, w in zip(values, weights, strict=True)) / sum(weights)
+    blended = (float(median(values)) + weighted_mean) / 2
+    fair_value = _money(Decimal(str(blended)))
+
+    # Dispersion across methods: wide disagreement means a less trustworthy mark.
+    mean_value = fmean(values)
+    dispersion = (
+        fmean(abs(v - mean_value) for v in values) / mean_value if mean_value > 0 else 0.0
+    )
+
     bear_value = _money(fair_value * Decimal("0.70"))
     bull_value = _money(fair_value * Decimal("1.35"))
     upside = float((fair_value / price - 1) * 100)
@@ -246,6 +296,9 @@ def build_analysis(financials: dict[str, object], price: Decimal) -> dict:
         risks.append({"severity": "Moderate", "title": "Debt exceeds cash"})
     if len(methods) == 1:
         risks.append({"severity": "Moderate", "title": "Single usable valuation method"})
+    wide_dispersion = dispersion > 0.5 and len(methods) >= 3
+    if wide_dispersion:
+        risks.append({"severity": "Moderate", "title": "Wide valuation dispersion across methods"})
 
     score = min(20, max(0, round((upside + 25) / 10)))
     score += min(15, max(0, round((growth or 0) / 2)))
@@ -254,6 +307,8 @@ def build_analysis(financials: dict[str, object], price: Decimal) -> dict:
     score += min(20, len(catalysts) * 5)
     score += min(5, len(methods))
     score -= sum(6 if risk["severity"] == "High" else 3 for risk in risks)
+    # Reward agreement between independent valuation methods, penalize disagreement.
+    score += round(_clamp((0.35 - dispersion) * 20, -8, 6))
     score = max(0, min(100, score))
 
     completeness = sum(financials.get(field) is not None for field in CORE_FIELDS)
@@ -265,6 +320,9 @@ def build_analysis(financials: dict[str, object], price: Decimal) -> dict:
         confidence = "C"
     else:
         confidence = "D"
+    # Very wide method disagreement knocks the confidence grade down one notch.
+    if wide_dispersion and dispersion > 0.65 and confidence in {"A", "B"}:
+        confidence = "B" if confidence == "A" else "C"
 
     high_risks = sum(risk["severity"] == "High" for risk in risks)
     risk_level = "High" if high_risks >= 2 else "Moderate" if risks else "Low"

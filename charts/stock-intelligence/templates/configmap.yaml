@@ -22,3 +22,11 @@ data:
   ANALYSIS_IDLE_SECONDS: {{ .Values.config.analysisIdleSeconds | quote }}
   UNIVERSE_REFRESH_HOURS: {{ .Values.config.universeRefreshHours | quote }}
   ANALYSIS_EXCHANGES: {{ .Values.config.analysisExchanges | quote }}
+  LIVE_QUOTES_ENABLED: {{ .Values.config.liveQuotesEnabled | quote }}
+  LIVE_QUOTE_INTERVAL_SECONDS: {{ .Values.config.liveQuoteIntervalSeconds | quote }}
+  LIVE_QUOTE_OFFHOURS_SECONDS: {{ .Values.config.liveQuoteOffhoursSeconds | quote }}
+  LIVE_QUOTE_BATCH_SIZE: {{ .Values.config.liveQuoteBatchSize | quote }}
+  LIVE_QUOTE_CHUNK_SIZE: {{ .Values.config.liveQuoteChunkSize | quote }}
+  LIVE_FRESH_SECONDS: {{ .Values.config.liveFreshSeconds | quote }}
+  BACKEND_RUN_LIVE_LOOP: {{ .Values.config.backendRunLiveLoop | quote }}
+  BACKEND_RUN_DEEP_LOOP: {{ .Values.config.backendRunDeepLoop | quote }}

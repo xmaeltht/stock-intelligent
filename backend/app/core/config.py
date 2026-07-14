@@ -29,6 +29,23 @@ class Settings(BaseSettings):
     analysis_idle_seconds: int = Field(default=300, ge=10, le=3600)
     universe_refresh_hours: int = Field(default=24, ge=1, le=168)
     analysis_exchanges: str = "Nasdaq,NYSE,NYSE American"
+    # Fast live-quote loop: refreshes current price / 1D move for already-analyzed
+    # securities far more often than the heavy fundamental loop can, so the screen
+    # feels live. Best-effort — failures never stop the deep analyzer.
+    live_quotes_enabled: bool = True
+    live_quote_interval_seconds: int = Field(default=45, ge=10, le=3600)
+    live_quote_offhours_seconds: int = Field(default=900, ge=30, le=7200)
+    live_quote_batch_size: int = Field(default=240, ge=10, le=2000)
+    live_quote_chunk_size: int = Field(default=40, ge=1, le=200)
+    # A security is considered "live/fresh" if its price was refreshed within
+    # this many seconds; drives the freshness badges in the UI.
+    live_fresh_seconds: int = Field(default=180, ge=30, le=3600)
+    # Run the analyzer loops inside the always-on backend process so scanning is
+    # guaranteed to run non-stop even without a dedicated analyzer deployment.
+    # If a separate continuous-analyzer pod is running, set the deep flag false
+    # to avoid duplicate work.
+    backend_run_live_loop: bool = True
+    backend_run_deep_loop: bool = True
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_user: str = "stock_app"

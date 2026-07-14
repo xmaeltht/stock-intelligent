@@ -1,18 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import TopNav from "../components/TopNav";
+import Sparkline from "../components/Sparkline";
 import {
   fetchWatchlistTickers,
   getJson,
+  isFresh,
   money,
   pct,
+  ratingFor,
   signalClass,
+  timeAgo,
   toggleWatch,
   type ListItem,
   type Summary,
 } from "../lib/api";
+
+const POLL_MS = 12000;
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -29,42 +35,86 @@ export default function Dashboard() {
   const [watchedOnly, setWatchedOnly] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [flash, setFlash] = useState<Record<string, "up" | "down">>({});
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [live, setLive] = useState(true);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const query = new URLSearchParams({
-      min_upside: String(assetType === "ETF" ? -100 : minimum),
-      asset_type: assetType,
-      ...(maxPrice ? { max_price: String(maxPrice) } : {}),
-      ...(minVolume ? { min_volume: String(minVolume) } : {}),
-      ...(signal !== "all" ? { signal } : {}),
-      ...(watchedOnly ? { watched_only: "true" } : {}),
-      ...(search ? { search } : {}),
-      sort_by: sortBy,
-      sort_order: sortOrder,
-      limit: "250",
-    });
-    setLoading(true);
-    Promise.all([
-      getJson<Summary>("/api/research/opportunities/summary", controller.signal),
-      getJson<ListItem[]>(`/api/research/opportunities/list?${query}`, controller.signal),
-      fetchWatchlistTickers().catch(() => new Set<string>()),
-    ])
-      .then(([nextSummary, nextAnalyses, nextWatched]) => {
+  const prices = useRef<Map<string, number>>(new Map());
+  const reqId = useRef(0);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const load = useCallback(
+    async (silent: boolean) => {
+      const query = new URLSearchParams({
+        min_upside: String(assetType === "ETF" ? -100 : minimum),
+        asset_type: assetType,
+        ...(maxPrice ? { max_price: String(maxPrice) } : {}),
+        ...(minVolume ? { min_volume: String(minVolume) } : {}),
+        ...(signal !== "all" ? { signal } : {}),
+        ...(watchedOnly ? { watched_only: "true" } : {}),
+        ...(search ? { search } : {}),
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        limit: "250",
+      });
+      const id = ++reqId.current;
+      if (!silent) setLoading(true);
+      try {
+        const [nextSummary, nextAnalyses, nextWatched] = await Promise.all([
+          getJson<Summary>("/api/research/opportunities/summary"),
+          getJson<ListItem[]>(`/api/research/opportunities/list?${query}`),
+          silent ? Promise.resolve(null) : fetchWatchlistTickers().catch(() => new Set<string>()),
+        ]);
+        if (id !== reqId.current) return; // a newer request superseded this one
+
+        // Flash rows whose price moved since the previous poll.
+        const nextFlash: Record<string, "up" | "down"> = {};
+        for (const item of nextAnalyses) {
+          const prev = prices.current.get(item.company.ticker);
+          const now = Number(item.current_price);
+          if (prev != null && now !== prev) nextFlash[item.company.ticker] = now > prev ? "up" : "down";
+          prices.current.set(item.company.ticker, now);
+        }
         setSummary(nextSummary);
         setAnalyses(nextAnalyses);
-        setWatched(nextWatched);
+        if (nextWatched) setWatched(nextWatched);
         setError("");
         setLoading(false);
-      })
-      .catch((reason) => {
-        if (reason.name !== "AbortError") {
+        if (Object.keys(nextFlash).length) {
+          setFlash(nextFlash);
+          if (flashTimer.current) clearTimeout(flashTimer.current);
+          flashTimer.current = setTimeout(() => setFlash({}), 1100);
+        }
+      } catch {
+        if (id === reqId.current && !silent) {
           setError("Research data is not available yet. Run the analyzer, then refresh.");
           setLoading(false);
         }
-      });
-    return () => controller.abort();
-  }, [minimum, maxPrice, minVolume, signal, sortBy, sortOrder, search, assetType, watchedOnly]);
+      }
+    },
+    [minimum, maxPrice, minVolume, signal, sortBy, sortOrder, search, assetType, watchedOnly],
+  );
+
+  // Reload on any filter change (with the loading state).
+  useEffect(() => {
+    prices.current.clear();
+    load(false);
+  }, [load]);
+
+  // Silent auto-poll so the screen updates live without a manual refresh.
+  useEffect(() => {
+    if (!live) return;
+    const timer = setInterval(() => {
+      if (!document.hidden) load(true);
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [live, load]);
+
+  // Tick a clock so "updated Xs ago" labels count up between polls.
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const onToggleWatch = useCallback(
     async (ticker: string) => {
@@ -108,11 +158,36 @@ export default function Dashboard() {
             <span className="eyebrow">Evidence-first equity research</span>
             <h1>Opportunity screener</h1>
             <p>
-              Transparent valuations from public SEC filings and delayed end-of-day prices. Every
+              Transparent valuations from public SEC filings and live-refreshed prices. Every
               conclusion exposes its assumptions, catalysts, risks, and primary sources.
             </p>
           </div>
         </div>
+
+        {summary && (
+          <div className="liveStrip">
+            <span className={`livePulse${summary.market_open ? " open" : ""}`}>
+              <i />
+              {summary.market_open ? "Market open · live scanning" : "Market closed · background scanning"}
+            </span>
+            <span className="liveMetric">
+              <b className="num">{summary.prices_updated_last_min.toLocaleString()}</b> prices / min
+            </span>
+            <span className="liveMetric">
+              <b className="num">{summary.analyses_last_5min.toLocaleString()}</b> re-analyzed / 5 min
+            </span>
+            <span className="liveMetric dim">
+              newest quote {timeAgo(summary.newest_price_at, nowMs)} ago
+            </span>
+            <button
+              className={`toggleChip liveToggle${live ? " on" : ""}`}
+              onClick={() => setLive((value) => !value)}
+              title="Toggle automatic live refresh"
+            >
+              {live ? "● Live" : "⏸ Paused"}
+            </button>
+          </div>
+        )}
 
         <div className="statRow">
           <div className="stat">
@@ -129,7 +204,7 @@ export default function Dashboard() {
             <strong>{summary?.qualified_count ?? "—"}</strong>
           </div>
           <div className="stat">
-            <span>Last model run</span>
+            <span>Last deep model run</span>
             <strong style={{ fontSize: 17 }}>
               {summary?.last_analysis_at
                 ? new Date(summary.last_analysis_at).toLocaleString(undefined, {
@@ -269,18 +344,19 @@ export default function Dashboard() {
               <tr>
                 <th style={{ width: 34 }} aria-label="Watch" />
                 <th className={`sortable${sortBy === "ticker" ? " sorted" : ""}`} onClick={() => toggleSort("ticker")}>Company{arrow("ticker")}</th>
-                <th>Type</th>
-                <th className={`r sortable${sortBy === "price" ? " sorted" : ""}`} onClick={() => toggleSort("price")}>Price{arrow("price")}</th>
+                <th className="r sortable" onClick={() => toggleSort("price")}>Price{arrow("price")}</th>
                 <th className={`r sortable${sortBy === "change_1d" ? " sorted" : ""}`} onClick={() => toggleSort("change_1d")}>1D{arrow("change_1d")}</th>
+                <th>Trend</th>
                 <th className="r">Fair value</th>
                 <th className={`r sortable${sortBy === "upside" ? " sorted" : ""}`} onClick={() => toggleSort("upside")}>Upside{arrow("upside")}</th>
                 <th className={`r sortable${sortBy === "volume" ? " sorted" : ""}`} onClick={() => toggleSort("volume")}>Volume{arrow("volume")}</th>
                 <th className={`r sortable${sortBy === "score" ? " sorted" : ""}`} onClick={() => toggleSort("score")}>Score{arrow("score")}</th>
+                <th>Rating</th>
                 <th className={`sortable${sortBy === "signal" ? " sorted" : ""}`} onClick={() => toggleSort("signal")}>Signal{arrow("signal")}</th>
                 <th className={`sortable${sortBy === "rsi" ? " sorted" : ""}`} onClick={() => toggleSort("rsi")}>RSI{arrow("rsi")}</th>
                 <th className={`sortable${sortBy === "confidence" ? " sorted" : ""}`} onClick={() => toggleSort("confidence")}>Conf.{arrow("confidence")}</th>
                 <th className={`sortable${sortBy === "risk" ? " sorted" : ""}`} onClick={() => toggleSort("risk")}>Risk{arrow("risk")}</th>
-                <th>Primary evidence</th>
+                <th>Updated</th>
               </tr>
             </thead>
             <tbody>
@@ -289,8 +365,19 @@ export default function Dashboard() {
                   item.company.asset_type === "ETF" || item.qualification === "Technical Screen Only";
                 const indicators = item.technical_indicators ?? {};
                 const change = indicators.change_1d_pct;
+                const fresh = isFresh(item.price_as_of, nowMs);
+                const flashDir = flash[item.company.ticker];
+                const rating = ratingFor({
+                  upsidePct: item.upside_pct,
+                  technicalOnly,
+                  signal: indicators.signal,
+                  rsi: indicators.rsi14,
+                  risk: item.risk_level,
+                  score: item.opportunity_score,
+                  trendCross: indicators.trend_cross,
+                });
                 return (
-                  <tr key={item.company.ticker}>
+                  <tr key={item.company.ticker} className={flashDir ? `flash flash--${flashDir}` : ""}>
                     <td>
                       <button
                         className={`watchStar${watched.has(item.company.ticker) ? " on" : ""}`}
@@ -306,9 +393,12 @@ export default function Dashboard() {
                         <span>{item.company.name}</span>
                       </Link>
                     </td>
-                    <td><b className="assetBadge">{item.company.asset_type}</b></td>
-                    <td className="r num">{money(item.current_price)}</td>
+                    <td className="r num priceCell">
+                      <i className={`freshDot${fresh ? " live" : ""}`} title={`Updated ${timeAgo(item.price_as_of ?? item.as_of, nowMs)} ago`} />
+                      {money(item.current_price)}
+                    </td>
                     <td className={`r num ${change == null ? "dim" : change >= 0 ? "up" : "down"}`}>{pct(change)}</td>
+                    <td><Sparkline values={indicators.spark} /></td>
                     <td className="r num">{technicalOnly ? <span className="dim">n/a</span> : money(item.fair_value)}</td>
                     <td className={`r num ${technicalOnly ? "dim" : item.upside_pct >= 90 ? "up" : ""}`}>
                       {technicalOnly ? "n/a" : `${item.upside_pct.toFixed(1)}%`}
@@ -320,6 +410,9 @@ export default function Dashboard() {
                       </b>
                     </td>
                     <td>
+                      <span className={`ratingBadge rating--${rating.slug}`}>{rating.label}</span>
+                    </td>
+                    <td>
                       <span className={signalClass(indicators.signal ?? "pending")}>
                         {indicators.signal ?? "Pending"}
                       </span>
@@ -327,9 +420,7 @@ export default function Dashboard() {
                     <td className="num">{indicators.rsi14 ?? <span className="dim">—</span>}</td>
                     <td><b className="gradeBadge">{item.confidence_grade}</b></td>
                     <td className={item.risk_level === "High" ? "down" : item.risk_level === "Low" ? "up" : ""}>{item.risk_level}</td>
-                    <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {item.catalysts[0]?.title ?? <span className="dim">No positive rule triggered</span>}
-                    </td>
+                    <td className="dim updatedCell">{timeAgo(item.price_as_of ?? item.as_of, nowMs)}</td>
                   </tr>
                 );
               })}

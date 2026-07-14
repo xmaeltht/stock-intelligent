@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import TopNav from "../../../components/TopNav";
 import StockChart from "../../../components/StockChart";
@@ -8,12 +8,16 @@ import {
   compact,
   fetchWatchlistTickers,
   getJson,
+  isFresh,
   money,
   pct,
+  ratingFor,
   signalClass,
+  timeAgo,
   toggleWatch,
   type Detail,
   type HistoryPoint,
+  type PricePoint,
 } from "../../../lib/api";
 
 function HistoryChart({ history }: { history: HistoryPoint[] }) {
@@ -72,21 +76,61 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
   const [ticker, setTicker] = useState("");
   const [data, setData] = useState<Detail | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
+  // The interactive chart binds to a stable history so live polls don't reset zoom.
+  const [chartHistory, setChartHistory] = useState<PricePoint[]>([]);
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [priceFlash, setPriceFlash] = useState<"up" | "down" | "">("");
+
+  const prevPrice = useRef<number | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const load = useCallback(async (value: string, silent: boolean) => {
+    try {
+      const detail = await getJson<Detail>(`/api/research/opportunities/stocks/${value}`);
+      const next = Number(detail.current_price);
+      if (prevPrice.current != null && next !== prevPrice.current) {
+        setPriceFlash(next > prevPrice.current ? "up" : "down");
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+        flashTimer.current = setTimeout(() => setPriceFlash(""), 1100);
+      }
+      prevPrice.current = next;
+      setData(detail);
+      setChartHistory((current) => (current.length ? current : detail.price_history ?? []));
+      if (!silent) {
+        getJson<HistoryPoint[]>(`/api/research/opportunities/stocks/${value}/history`)
+          .then(setHistory)
+          .catch(() => setHistory([]));
+      }
+    } catch {
+      if (!silent) setError("This security has not been analyzed yet.");
+    }
+  }, []);
 
   useEffect(() => {
     params.then(({ ticker: value }) => {
       setTicker(value);
-      getJson<Detail>(`/api/research/opportunities/stocks/${value}`)
-        .then(setData)
-        .catch(() => setError("This security has not been analyzed yet."));
-      getJson<HistoryPoint[]>(`/api/research/opportunities/stocks/${value}/history`)
-        .then(setHistory)
-        .catch(() => setHistory([]));
+      prevPrice.current = null;
+      setChartHistory([]);
+      load(value, false);
       fetchWatchlistTickers().then(setWatchedSet).catch(() => undefined);
     });
-  }, [params]);
+  }, [params, load]);
+
+  // Silent live refresh of the header/indicators (the chart stays put).
+  useEffect(() => {
+    if (!ticker) return;
+    const timer = setInterval(() => {
+      if (!document.hidden) load(ticker, true);
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [ticker, load]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const watched = watchedSet.has(ticker.toUpperCase());
   const onToggleWatch = async () => {
@@ -135,6 +179,15 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
   const margins = fundamentals.margins ?? {};
   const ratios = fundamentals.ratios ?? {};
   const change = indicators.change_1d_pct;
+  const rating = ratingFor({
+    upsidePct: data.upside_pct,
+    technicalOnly,
+    signal: indicators.signal,
+    rsi: indicators.rsi14,
+    risk: data.risk_level,
+    score: data.opportunity_score,
+    trendCross: indicators.trend_cross,
+  });
 
   return (
     <>
@@ -154,8 +207,11 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
               {watched ? "★ Watching" : "☆ Watch"}
             </button>
             <div className="priceBlock">
-              <span>Last close · {data.price_date}</span>
-              <strong>{money(data.current_price)}</strong>
+              <span>
+                <i className={`freshDot${isFresh(data.price_as_of, nowMs) ? " live" : ""}`} />
+                {isFresh(data.price_as_of, nowMs) ? "Live" : "Last"} · updated {timeAgo(data.price_as_of ?? data.as_of, nowMs)} ago
+              </span>
+              <strong className={priceFlash ? `flashPrice flashPrice--${priceFlash}` : ""}>{money(data.current_price)}</strong>
               <span className={change == null ? "dim" : change >= 0 ? "up" : "down"}>
                 {pct(change)} today · {pct(indicators.change_20d_pct)} 20d
               </span>
@@ -164,6 +220,10 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
         </div>
 
         <div className="scenarioRow">
+          <div className="scenario scenario--rating">
+            <span>Rules-based rating</span>
+            <strong className={`ratingBadge ratingBadge--lg rating--${rating.slug}`}>{rating.label}</strong>
+          </div>
           {!technicalOnly && (
             <>
               <div className="scenario"><span>Bear case</span><strong>{money(data.bear_value)}</strong></div>
@@ -246,7 +306,7 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
           </div>
         )}
 
-        <StockChart history={data.price_history ?? []} />
+        <StockChart history={chartHistory.length ? chartHistory : data.price_history ?? []} />
         <p className="notice" style={{ marginTop: 0 }}>
           Trend indicators help assess entry timing and liquidity; they do not independently validate the fundamental fair value.
         </p>

@@ -212,4 +212,7 @@ def build_technical_indicators(history: list[dict[str, object]]) -> dict[str, ob
         "macd_signal": round(macd_signal_series[-1], 4),
         "macd_histogram": round(histogram[-1], 4),
         "impulse_macd": impulse,
+        # Compact recent-close series (~6 weeks) for row sparklines; kept live by
+        # the fast quote loop so the mini trend updates without a full re-analysis.
+        "spark": [round(close, 4) for close in closes[-32:]],
     }
