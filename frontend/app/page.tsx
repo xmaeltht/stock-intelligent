@@ -41,6 +41,9 @@ export default function Dashboard() {
   const [flash, setFlash] = useState<Record<string, "up" | "down">>({});
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [live, setLive] = useState(true);
+  // Once the URL filters have been read back into state (so we can restore the
+  // exact view on browser-back instead of resetting to the default screener).
+  const [hydrated, setHydrated] = useState(false);
 
   const prices = useRef<Map<string, number>>(new Map());
   const reqId = useRef(0);
@@ -106,11 +109,49 @@ export default function Dashboard() {
       .catch(() => setSectors(null));
   }, [assetType]);
 
-  // Reload on any filter change (with the loading state).
+  // Restore filters from the URL once on mount, so returning to this page (via
+  // browser back or the detail page's Back button) rebuilds the view you left.
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const get = (key: string) => params.get(key);
+    if (get("asset")) setAssetType(get("asset") as string);
+    if (get("sector")) setSector(get("sector") as string);
+    if (get("sort")) setSortBy(get("sort") as string);
+    if (get("order")) setSortOrder(get("order") as string);
+    if (get("min")) setMinimum(Number(get("min")));
+    if (get("q")) setSearch(get("q") as string);
+    if (get("signal")) setSignal(get("signal") as string);
+    if (get("maxp")) setMaxPrice(Number(get("maxp")));
+    if (get("vol")) setMinVolume(Number(get("vol")));
+    if (get("watch") === "1") setWatchedOnly(true);
+    setHydrated(true);
+  }, []);
+
+  // Mirror the active filters into the URL (replaceState → no history spam), so
+  // the entry we leave when opening a stock already encodes the view.
+  useEffect(() => {
+    if (!hydrated) return;
+    const params = new URLSearchParams();
+    if (assetType !== "Stock") params.set("asset", assetType);
+    if (sector !== "all") params.set("sector", sector);
+    if (sortBy !== "rating") params.set("sort", sortBy);
+    if (sortOrder !== "desc") params.set("order", sortOrder);
+    if (minimum !== -100) params.set("min", String(minimum));
+    if (search) params.set("q", search);
+    if (signal !== "all") params.set("signal", signal);
+    if (maxPrice) params.set("maxp", String(maxPrice));
+    if (minVolume) params.set("vol", String(minVolume));
+    if (watchedOnly) params.set("watch", "1");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [hydrated, assetType, sector, sortBy, sortOrder, minimum, search, signal, maxPrice, minVolume, watchedOnly]);
+
+  // Reload on any filter change (with the loading state), after URL restore.
+  useEffect(() => {
+    if (!hydrated) return;
     prices.current.clear();
     load(false);
-  }, [load]);
+  }, [load, hydrated]);
 
   // Silent auto-poll so the screen updates live without a manual refresh.
   useEffect(() => {
@@ -371,7 +412,7 @@ export default function Dashboard() {
                 <th className={`r sortable${sortBy === "change_1d" ? " sorted" : ""}`} onClick={() => toggleSort("change_1d")}>1D{arrow("change_1d")}</th>
                 <th>Trend</th>
                 <th className="r">Fair value</th>
-                <th className={`r sortable${sortBy === "upside" ? " sorted" : ""}`} onClick={() => toggleSort("upside")}>Upside{arrow("upside")}</th>
+                <th className={`r sortable${sortBy === "upside" ? " sorted" : ""}`} onClick={() => toggleSort("upside")} title="Potential upside from the current price to the modeled fair value">Upside{arrow("upside")}</th>
                 <th className={`r sortable${sortBy === "volume" ? " sorted" : ""}`} onClick={() => toggleSort("volume")}>Volume{arrow("volume")}</th>
                 <th className={`r sortable${sortBy === "score" ? " sorted" : ""}`} onClick={() => toggleSort("score")}>Score{arrow("score")}</th>
                 <th className={`sortable${sortBy === "rating" ? " sorted" : ""}`} onClick={() => toggleSort("rating")}>Rating{arrow("rating")}</th>

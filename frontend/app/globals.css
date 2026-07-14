@@ -260,7 +260,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .priceBlock { text-align: right; }
 .priceBlock strong { display: block; font: 700 37px var(--mono); letter-spacing: -.03em; }
 .priceBlock span { color: var(--muted); font: 12px var(--mono); }
-.backLink { display: inline-block; margin: 18px 0 0; color: var(--muted); text-decoration: none; font: 600 12px var(--sans); }
+.backLink { display: inline-block; margin: 18px 0 0; color: var(--muted); text-decoration: none;
+  font: 600 12px var(--sans); background: none; border: 0; padding: 0; cursor: pointer; }
 .backLink:hover { color: var(--text); }
 .watchBtn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 17px; border-radius: 999px; color: var(--text); font: 600 13px var(--sans); cursor: pointer; transition: all .15s; }
 .watchBtn:hover { border-color: var(--glass-border-2); }

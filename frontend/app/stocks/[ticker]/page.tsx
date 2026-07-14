@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import TopNav from "../../../components/TopNav";
 import StockChart from "../../../components/StockChart";
 import DividendSection from "../../../components/DividendSection";
@@ -74,6 +74,12 @@ function FiscalBars({ title, series }: { title: string; series: Array<{ fy_end: 
 }
 
 export default function StockPage({ params }: { params: Promise<{ ticker: string }> }) {
+  const router = useRouter();
+  const goBack = () => {
+    // Return to the exact previous view (filtered screener, watchlist, etc.).
+    if (typeof window !== "undefined" && window.history.length > 1) router.back();
+    else router.push("/");
+  };
   const [ticker, setTicker] = useState("");
   const [data, setData] = useState<Detail | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
@@ -158,7 +164,7 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
       <>
         <TopNav online />
         <main className="shell">
-          <Link className="backLink" href="/">← Back to screener</Link>
+          <button className="backLink" onClick={goBack}>← Back</button>
           <div className="notice notice--error">{error}</div>
         </main>
       </>
@@ -194,7 +200,7 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
     <>
       <TopNav online />
       <main className="shell">
-        <Link className="backLink" href="/">← All opportunities</Link>
+        <button className="backLink" onClick={goBack}>← Back</button>
         <div className="stockHead">
           <div>
             <span className="eyebrow">
@@ -234,8 +240,8 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
                 <strong>{money(data.fair_value)}</strong>
               </div>
               <div className="scenario"><span>Bull case</span><strong>{money(data.bull_value)}</strong></div>
-              <div className="scenario">
-                <span>Modeled upside</span>
+              <div className="scenario" title="Potential move from the current price to the modeled fair value">
+                <span>Upside from current price</span>
                 <strong className={data.upside_pct >= 0 ? "up" : "down"}>{data.upside_pct.toFixed(1)}%</strong>
               </div>
             </>
