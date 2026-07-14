@@ -149,9 +149,10 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
                 try:
                     result = build_analysis(financials, quote.close)
                 except ValueError:
-                    # No positive fundamental anchors a valuation (pre-revenue,
-                    # unprofitable, or non-USD filer). Store a transparent
-                    # technical-only screen instead of failing forever.
+                    # Either no positive fundamental anchors a valuation
+                    # (pre-revenue, unprofitable, non-USD filer) or the model
+                    # produced an implausible result that failed the data-quality
+                    # sanity check. Store a transparent technical-only screen.
                     result = build_technical_screen(
                         quote.close,
                         quote.volume,
@@ -161,7 +162,10 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
                         extra_risks=[
                             {
                                 "severity": "High",
-                                "title": "No positive fundamental supports a valuation",
+                                "title": (
+                                    "No reliable fundamental valuation "
+                                    "(missing data or failed sanity check)"
+                                ),
                             }
                         ],
                     )

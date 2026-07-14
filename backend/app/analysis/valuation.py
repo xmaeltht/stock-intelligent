@@ -1,6 +1,12 @@
 from decimal import Decimal
 from statistics import median
 
+# A deterministic multiple almost never implies more than a few hundred percent
+# upside for a real company. Anything beyond this is virtually always a
+# share-count or units error in the filing data (dual-class share counts,
+# thousands-vs-units), so the valuation is rejected rather than published.
+IMPLAUSIBLE_UPSIDE_PCT = 900.0
+
 CORE_FIELDS = (
     "revenue",
     "previous_revenue",
@@ -169,6 +175,12 @@ def build_analysis(financials: dict[str, object], price: Decimal) -> dict:
     bear_value = _money(fair_value * Decimal("0.70"))
     bull_value = _money(fair_value * Decimal("1.35"))
     upside = float((fair_value / price - 1) * 100)
+
+    if upside > IMPLAUSIBLE_UPSIDE_PCT:
+        raise ValueError(
+            f"Implausible modeled upside {upside:.0f}% (fair value {fair_value} vs "
+            f"price {price}); source filing data likely has a share-count or units error"
+        )
 
     fundamentals = build_fundamentals(financials, price)
 

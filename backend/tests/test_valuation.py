@@ -71,3 +71,20 @@ def test_negative_equity_is_flagged_as_risk() -> None:
     assert "Negative shareholder equity" in titles
     assert "Revenue contraction" in titles
     assert result["risk_level"] == "High"
+
+
+def test_implausible_upside_is_rejected() -> None:
+    # Tiny share count (a dual-class / units error) yields absurd per-share value.
+    financials = _financials(
+        revenue=Decimal("6000000000"),
+        previous_revenue=Decimal("5000000000"),
+        net_income=Decimal("800000000"),
+        free_cash_flow=Decimal("700000000"),
+        cash=Decimal("1000000000"),
+        debt=Decimal("200000000"),
+        shares_outstanding=Decimal("10000"),  # implausibly small
+        eps=Decimal("5.0"),
+        equity=Decimal("4000000000"),
+    )
+    with pytest.raises(ValueError, match="Implausible"):
+        build_analysis(financials, Decimal("200"))

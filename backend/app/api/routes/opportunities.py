@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.orm import Session, aliased, joinedload, load_only
 
+from app.analysis.valuation import IMPLAUSIBLE_UPSIDE_PCT
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.company import Company
@@ -99,6 +100,7 @@ def build_summary(db: Session) -> DashboardSummary:
                 *eligible,
                 Company.asset_type == "Stock",
                 StockAnalysis.upside_pct >= 90,
+                StockAnalysis.upside_pct <= IMPLAUSIBLE_UPSIDE_PCT,
             )
         )
         or 0,
@@ -150,6 +152,10 @@ def opportunities(
         Company.is_research_eligible.is_(True),
         StockAnalysis.upside_pct >= effective_min_upside,
     ]
+    # Hide implausible (data-error) valuations from ranked browsing, but never
+    # when the user is searching for a specific ticker.
+    if not search:
+        filters.append(StockAnalysis.upside_pct <= IMPLAUSIBLE_UPSIDE_PCT)
     if asset_type != "all" and not search:
         filters.append(Company.asset_type == asset_type)
     if min_price is not None:
@@ -260,7 +266,7 @@ def market_overview(db: Annotated[Session, Depends(get_db)]) -> MarketOverview:
         exchange_counts[row.exchange or "Unknown"] += 1
         asset_type_counts[row.asset_type] += 1
         score_buckets[min(9, max(0, row.opportunity_score // 10))] += 1
-        if row.asset_type == "Stock":
+        if row.asset_type == "Stock" and row.upside_pct <= IMPLAUSIBLE_UPSIDE_PCT:
             upside = row.upside_pct
             index = (
                 0 if upside < 0
