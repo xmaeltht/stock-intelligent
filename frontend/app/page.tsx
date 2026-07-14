@@ -21,6 +21,14 @@ import {
 
 const POLL_MS = 12000;
 
+const SESSION_LABEL: Record<string, string> = {
+  pre: "Pre-market · live scanning",
+  regular: "Market open · live scanning",
+  after: "After-hours · live scanning",
+  overnight: "Overnight · live scanning",
+  closed: "Market closed · background scanning",
+};
+
 export default function Dashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [analyses, setAnalyses] = useState<ListItem[]>([]);
@@ -218,9 +226,9 @@ export default function Dashboard() {
 
         {summary && (
           <div className="liveStrip">
-            <span className={`livePulse${summary.market_open ? " open" : ""}`}>
+            <span className={`livePulse${summary.market_session !== "closed" ? " open" : ""}`}>
               <i />
-              {summary.market_open ? "Market open · live scanning" : "Market closed · background scanning"}
+              {SESSION_LABEL[summary.market_session] ?? "Market closed · background scanning"}
             </span>
             <span className="liveMetric">
               <b className="num">{summary.prices_updated_last_min.toLocaleString()}</b> prices / min

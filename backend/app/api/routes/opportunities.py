@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, aliased, joinedload, load_only
 from app.analysis.valuation import IMPLAUSIBLE_UPSIDE_PCT
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.jobs.live_quotes import is_market_open
+from app.jobs.live_quotes import is_market_open, market_session
 from app.models.company import Company
 from app.models.stock_analysis import StockAnalysis
 from app.schemas.analysis import (
@@ -149,6 +149,7 @@ def build_summary(db: Session) -> DashboardSummary:
         or 0,
         last_analysis_at=db.scalar(select(func.max(StockAnalysis.as_of))),
         market_open=is_market_open(),
+        market_session=market_session(),
         prices_updated_last_min=db.scalar(
             select(func.count())
             .select_from(StockAnalysis)

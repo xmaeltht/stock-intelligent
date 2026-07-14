@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # feels live. Best-effort — failures never stop the deep analyzer.
     live_quotes_enabled: bool = True
     live_quote_interval_seconds: int = Field(default=45, ge=10, le=3600)
+    # Overnight (20:00-04:00 ET): quotes barely move, so refresh less often.
+    live_quote_overnight_seconds: int = Field(default=180, ge=30, le=7200)
+    # Weekend / fully closed.
     live_quote_offhours_seconds: int = Field(default=900, ge=30, le=7200)
     live_quote_batch_size: int = Field(default=240, ge=10, le=2000)
     live_quote_chunk_size: int = Field(default=40, ge=1, le=200)

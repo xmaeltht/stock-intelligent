@@ -41,6 +41,8 @@ class LiveQuote:
     volume: int | None
     change_pct: float | None
     source: str
+    # Yahoo marketState: PRE, REGULAR, POST, POSTPOST, CLOSED (None from Stooq).
+    market_state: str | None = None
 
 
 def _clean_number(raw: object) -> float | None:
@@ -103,14 +105,24 @@ def parse_stooq_light(payload: str, symbol_map: dict[str, str]) -> list["LiveQuo
 
 
 def parse_yahoo_quote(payload: dict) -> list["LiveQuote"]:
+    """Prefer the price for the currently active session (pre/post/regular) so
+    the loop reflects pre-market and after-hours moves, not just the last close."""
     results = ((payload or {}).get("quoteResponse") or {}).get("result") or []
     quotes: list[LiveQuote] = []
     for item in results:
         symbol = str(item.get("symbol") or "").upper()
-        price = item.get("regularMarketPrice")
+        state = str(item.get("marketState") or "").upper()
+        pre = item.get("preMarketPrice")
+        post = item.get("postMarketPrice")
+        regular = item.get("regularMarketPrice")
+        if state == "PRE" and isinstance(pre, int | float) and pre > 0:
+            price, change = pre, item.get("preMarketChangePercent")
+        elif state in ("POST", "POSTPOST", "CLOSED") and isinstance(post, int | float) and post > 0:
+            price, change = post, item.get("postMarketChangePercent")
+        else:
+            price, change = regular, item.get("regularMarketChangePercent")
         if not symbol or not isinstance(price, int | float) or price <= 0:
             continue
-        change = item.get("regularMarketChangePercent")
         volume = item.get("regularMarketVolume")
         quotes.append(
             LiveQuote(
@@ -119,6 +131,7 @@ def parse_yahoo_quote(payload: dict) -> list["LiveQuote"]:
                 volume=int(volume) if isinstance(volume, int | float) else None,
                 change_pct=float(change) if isinstance(change, int | float) else None,
                 source="yahoo",
+                market_state=state or None,
             )
         )
     return quotes
@@ -137,11 +150,13 @@ class NasdaqProvider:
         pending = [symbol.upper() for symbol in symbols if symbol]
         for start in range(0, len(pending), chunk_size):
             chunk = pending[start : start + chunk_size]
-            for quote in self._stooq_batch(chunk):
+            # Yahoo first: it carries pre-market / after-hours prices. Stooq only
+            # backfills symbols Yahoo couldn't return (regular-session close).
+            for quote in self._yahoo_batch(chunk):
                 found.setdefault(quote.symbol, quote)
             missing = [symbol for symbol in chunk if symbol not in found]
             if missing:
-                for quote in self._yahoo_batch(missing):
+                for quote in self._stooq_batch(missing):
                     found.setdefault(quote.symbol, quote)
         return found
 
@@ -160,8 +175,21 @@ class NasdaqProvider:
 
     def _yahoo_batch(self, chunk: list[str]) -> list["LiveQuote"]:
         joined = ",".join(chunk)
-        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={joined}"
-        request = Request(url, headers={"User-Agent": "Mozilla/5.0 StockIntelligence/0.2"})
+        fields = (
+            "marketState,regularMarketPrice,regularMarketChangePercent,regularMarketVolume,"
+            "preMarketPrice,preMarketChangePercent,postMarketPrice,postMarketChangePercent"
+        )
+        url = (
+            f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={joined}&fields={fields}"
+        )
+        request = Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+                "Accept": "application/json",
+            },
+        )
         try:
             YAHOO_LIMITER.wait()
             with urlopen(request, timeout=20) as response:  # noqa: S310 - fixed provider URL

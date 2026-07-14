@@ -15,7 +15,7 @@ from app.jobs.daily_pipeline import (
     select_symbols,
     validate_results,
 )
-from app.jobs.live_quotes import is_market_open, run_live_cycle
+from app.jobs.live_quotes import ACTIVE_SESSIONS, market_session, run_live_cycle
 from app.providers.nasdaq import NasdaqProvider
 from app.providers.sec import SecProvider
 
@@ -76,15 +76,16 @@ def live_loop(prices: NasdaqProvider, stop: Event = stop_event) -> None:
     log_event("live_loop_started", interval=settings.live_quote_interval_seconds)
     while not stop.is_set():
         try:
-            open_now = is_market_open()
+            session_name = market_session()
             with SessionLocal() as session:
                 updated = run_live_cycle(session, settings, prices)
-            log_event("live_cycle_completed", updated=updated, market_open=open_now)
-            delay = (
-                settings.live_quote_interval_seconds
-                if open_now
-                else settings.live_quote_offhours_seconds
-            )
+            log_event("live_cycle_completed", updated=updated, session=session_name)
+            if session_name in ACTIVE_SESSIONS:
+                delay = settings.live_quote_interval_seconds
+            elif session_name == "overnight":
+                delay = settings.live_quote_overnight_seconds
+            else:  # closed (weekend)
+                delay = settings.live_quote_offhours_seconds
             stop.wait(delay)
         except Exception:
             logger.exception("live quote cycle failed")

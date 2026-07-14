@@ -22,14 +22,36 @@ from app.providers.nasdaq import LiveQuote, NasdaqProvider
 EASTERN = ZoneInfo("America/New_York")
 
 
-def is_market_open(now: datetime | None = None) -> bool:
-    """Regular US equity session (Mon-Fri, 9:30-16:00 ET). Holidays are ignored;
-    on a holiday the loop simply refreshes stale prices that don't move."""
+def market_session(now: datetime | None = None) -> str:
+    """Current US trading session in ET:
+    'pre' (4:00-9:30), 'regular' (9:30-16:00), 'after' (16:00-20:00),
+    'overnight' (20:00-4:00 on a weekday/into a weekday), or 'closed' (weekend).
+    Holidays are treated as normal days (prices simply don't move)."""
     moment = (now or datetime.now(UTC)).astimezone(EASTERN)
-    if moment.weekday() >= 5:
-        return False
     minutes = moment.hour * 60 + moment.minute
-    return 9 * 60 + 30 <= minutes < 16 * 60
+    weekday = moment.weekday()  # Mon=0 .. Sun=6
+    if weekday < 5:
+        if 4 * 60 <= minutes < 9 * 60 + 30:
+            return "pre"
+        if 9 * 60 + 30 <= minutes < 16 * 60:
+            return "regular"
+        if 16 * 60 <= minutes < 20 * 60:
+            return "after"
+    # Overnight window: weeknights, plus Sunday evening ahead of Monday's pre-market.
+    if (weekday < 5 and minutes >= 20 * 60) or (weekday < 5 and minutes < 4 * 60) or (
+        weekday == 6 and minutes >= 20 * 60
+    ):
+        return "overnight"
+    return "closed"
+
+
+# Sessions during which the fast loop runs at full cadence.
+ACTIVE_SESSIONS = {"pre", "regular", "after"}
+
+
+def is_market_open(now: datetime | None = None) -> bool:
+    """True only during the regular session (kept for the summary badge)."""
+    return market_session(now) == "regular"
 
 
 def _latest_ids_subquery():

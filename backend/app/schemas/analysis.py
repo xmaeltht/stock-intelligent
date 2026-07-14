@@ -88,6 +88,7 @@ class DashboardSummary(BaseModel):
     last_analysis_at: datetime | None
     # Live-scan telemetry so the UI can show the analyzers are running non-stop.
     market_open: bool = False
+    market_session: str = "closed"
     prices_updated_last_min: int = 0
     analyses_last_5min: int = 0
     newest_price_at: datetime | None = None

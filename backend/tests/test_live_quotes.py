@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from app.jobs.live_quotes import apply_live_quote, is_market_open
+from app.jobs.live_quotes import apply_live_quote, is_market_open, market_session
 from app.models.stock_analysis import StockAnalysis
 from app.providers.nasdaq import LiveQuote, parse_stooq_light, parse_yahoo_quote
 
@@ -9,13 +9,52 @@ from app.providers.nasdaq import LiveQuote, parse_stooq_light, parse_yahoo_quote
 def test_market_open_weekday_midday() -> None:
     # 2026-07-14 is a Tuesday; 14:00 UTC == 10:00 ET (open).
     assert is_market_open(datetime(2026, 7, 14, 14, 0, tzinfo=UTC)) is True
-    # 02:00 UTC == 22:00 ET prior day (closed).
+    # 02:00 UTC == 22:00 ET prior day (overnight, not the regular session).
     assert is_market_open(datetime(2026, 7, 14, 2, 0, tzinfo=UTC)) is False
 
 
 def test_market_closed_weekend() -> None:
     # 2026-07-18 is a Saturday.
     assert is_market_open(datetime(2026, 7, 18, 15, 0, tzinfo=UTC)) is False
+
+
+def test_market_sessions() -> None:
+    # Tuesday 2026-07-14, times in UTC (ET = UTC-4 in July).
+    assert market_session(datetime(2026, 7, 14, 12, 0, tzinfo=UTC)) == "pre"  # 08:00 ET
+    assert market_session(datetime(2026, 7, 14, 14, 0, tzinfo=UTC)) == "regular"  # 10:00 ET
+    assert market_session(datetime(2026, 7, 14, 21, 0, tzinfo=UTC)) == "after"  # 17:00 ET
+    assert market_session(datetime(2026, 7, 14, 2, 0, tzinfo=UTC)) == "overnight"  # Mon 22:00 ET
+    assert market_session(datetime(2026, 7, 18, 15, 0, tzinfo=UTC)) == "closed"  # Saturday
+
+
+def test_yahoo_quote_prefers_premarket_price() -> None:
+    payload = {
+        "quoteResponse": {
+            "result": [
+                {
+                    "symbol": "AAPL",
+                    "marketState": "PRE",
+                    "regularMarketPrice": 200.0,
+                    "regularMarketChangePercent": 0.0,
+                    "preMarketPrice": 205.0,
+                    "preMarketChangePercent": 2.5,
+                    "regularMarketVolume": 1000,
+                },
+                {
+                    "symbol": "MSFT",
+                    "marketState": "POST",
+                    "regularMarketPrice": 500.0,
+                    "postMarketPrice": 495.0,
+                    "postMarketChangePercent": -1.0,
+                },
+            ]
+        }
+    }
+    quotes = {q.symbol: q for q in parse_yahoo_quote(payload)}
+    assert quotes["AAPL"].price == Decimal("205.0")  # pre-market price wins
+    assert quotes["AAPL"].change_pct == 2.5
+    assert quotes["MSFT"].price == Decimal("495.0")  # after-hours price wins
+    assert quotes["MSFT"].market_state == "POST"
 
 
 def test_parse_stooq_light_maps_symbols() -> None:

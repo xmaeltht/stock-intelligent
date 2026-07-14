@@ -81,6 +81,7 @@ config:
   # than the deep loop so the screener updates near-live during market hours.
   liveQuotesEnabled: true
   liveQuoteIntervalSeconds: 45
+  liveQuoteOvernightSeconds: 180
   liveQuoteOffhoursSeconds: 900
   liveQuoteBatchSize: 240
   liveQuoteChunkSize: 40

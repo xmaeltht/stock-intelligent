@@ -141,6 +141,7 @@ export type Summary = {
   qualified_count: number;
   last_analysis_at: string | null;
   market_open: boolean;
+  market_session: string;
   prices_updated_last_min: number;
   analyses_last_5min: number;
   newest_price_at: string | null;
