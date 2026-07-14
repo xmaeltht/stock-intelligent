@@ -65,6 +65,44 @@ def eligible_conditions(settings):
     )
 
 
+def _clamp_expr(expr, low: float, high: float):
+    """Portable clamp (SQLite has no scalar greatest/least)."""
+    return case((expr < low, low), (expr > high, high), else_=expr)
+
+
+def rating_expression():
+    """A numeric composite mirroring the frontend rules-based rating, so the whole
+    universe can be ranked Strong Buy → Sell in SQL. Higher is more bullish."""
+    indicators = StockAnalysis.technical_indicators
+    signal = indicators["signal"].as_string()
+    rsi = indicators["rsi14"].as_float()
+    cross = indicators["trend_cross"].as_string()
+    signal_term = case((signal == "Bullish", 2.0), (signal == "Bearish", -2.0), else_=0.0)
+    # Modeled upside only counts for stocks with a real fundamental fair value.
+    upside_term = case(
+        (
+            (Company.asset_type == "Stock")
+            & (StockAnalysis.qualification != "Technical Screen Only"),
+            _clamp_expr(StockAnalysis.upside_pct / 20.0, -3.0, 4.0),
+        ),
+        else_=0.0,
+    )
+    cross_term = case((cross == "Golden cross", 1.0), (cross == "Death cross", -1.0), else_=0.0)
+    rsi_term = case(
+        (rsi >= 78, -1.0),
+        (rsi <= 30, 1.0),
+        ((rsi >= 45) & (rsi <= 68), 0.5),
+        else_=0.0,
+    )
+    risk_term = case(
+        (StockAnalysis.risk_level == "Low", 0.5),
+        (StockAnalysis.risk_level == "High", -0.5),
+        else_=0.0,
+    )
+    score_term = _clamp_expr((StockAnalysis.opportunity_score - 50) / 25.0, -2.0, 2.0)
+    return signal_term + upside_term + cross_term + rsi_term + risk_term + score_term
+
+
 def build_summary(db: Session) -> DashboardSummary:
     settings = get_settings()
     ids = latest_ids()
@@ -145,6 +183,7 @@ def opportunities(
     search: Annotated[str | None, Query(max_length=100)] = None,
     asset_type: Literal["all", "Stock", "ETF"] = "Stock",
     sort_by: Literal[
+        "rating",
         "score",
         "upside",
         "name",
@@ -157,7 +196,7 @@ def opportunities(
         "rsi",
         "confidence",
         "risk",
-    ] = "score",
+    ] = "rating",
     sort_order: Literal["asc", "desc"] = "desc",
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -220,6 +259,7 @@ def opportunities(
         else_=0,
     )
     sort_columns = {
+        "rating": rating_expression(),
         "score": StockAnalysis.opportunity_score,
         "upside": StockAnalysis.upside_pct,
         "name": Company.name,

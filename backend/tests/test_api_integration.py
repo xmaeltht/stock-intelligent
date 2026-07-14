@@ -195,7 +195,7 @@ def test_search_ignores_asset_type_toggle(client: TestClient) -> None:
 
 
 def test_list_sorts_by_new_keys(client: TestClient) -> None:
-    for key in ("change_1d", "change_5d", "signal", "rsi", "confidence", "risk"):
+    for key in ("rating", "change_1d", "change_5d", "signal", "rsi", "confidence", "risk"):
         response = client.get(
             f"/api/v1/opportunities/list?min_upside=-100&sort_by={key}&sort_order=desc"
         )

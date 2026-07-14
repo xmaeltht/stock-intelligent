@@ -28,7 +28,7 @@ export default function Dashboard() {
   const [maxPrice, setMaxPrice] = useState(0);
   const [minVolume, setMinVolume] = useState(0);
   const [signal, setSignal] = useState("all");
-  const [sortBy, setSortBy] = useState("score");
+  const [sortBy, setSortBy] = useState("rating");
   const [sortOrder, setSortOrder] = useState("desc");
   const [search, setSearch] = useState("");
   const [assetType, setAssetType] = useState("Stock");
@@ -291,6 +291,7 @@ export default function Dashboard() {
           <label>
             Rank by
             <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+              <option value="rating">Rating (Strong Buy first)</option>
               <option value="score">Opportunity score</option>
               <option value="upside">Upside</option>
               <option value="change_1d">1D change</option>
@@ -351,7 +352,7 @@ export default function Dashboard() {
                 <th className={`r sortable${sortBy === "upside" ? " sorted" : ""}`} onClick={() => toggleSort("upside")}>Upside{arrow("upside")}</th>
                 <th className={`r sortable${sortBy === "volume" ? " sorted" : ""}`} onClick={() => toggleSort("volume")}>Volume{arrow("volume")}</th>
                 <th className={`r sortable${sortBy === "score" ? " sorted" : ""}`} onClick={() => toggleSort("score")}>Score{arrow("score")}</th>
-                <th>Rating</th>
+                <th className={`sortable${sortBy === "rating" ? " sorted" : ""}`} onClick={() => toggleSort("rating")}>Rating{arrow("rating")}</th>
                 <th className={`sortable${sortBy === "signal" ? " sorted" : ""}`} onClick={() => toggleSort("signal")}>Signal{arrow("signal")}</th>
                 <th className={`sortable${sortBy === "rsi" ? " sorted" : ""}`} onClick={() => toggleSort("rsi")}>RSI{arrow("rsi")}</th>
                 <th className={`sortable${sortBy === "confidence" ? " sorted" : ""}`} onClick={() => toggleSort("confidence")}>Conf.{arrow("confidence")}</th>
