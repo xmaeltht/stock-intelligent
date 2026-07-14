@@ -185,6 +185,15 @@ def test_search_ignores_upside_threshold(client: TestClient) -> None:
     assert any(row["company"]["ticker"] == "TEST" for row in with_search)
 
 
+def test_search_ignores_asset_type_toggle(client: TestClient) -> None:
+    # Seeded TEST is a Stock; searching it while the ETF toggle is active must
+    # still find it, so a searched ticker is never hidden by the type filter.
+    rows = client.get(
+        "/api/v1/opportunities/list?search=TEST&asset_type=ETF&min_upside=-100"
+    ).json()
+    assert any(row["company"]["ticker"] == "TEST" for row in rows)
+
+
 def test_list_sorts_by_new_keys(client: TestClient) -> None:
     for key in ("change_1d", "change_5d", "signal", "rsi", "confidence", "risk"):
         response = client.get(

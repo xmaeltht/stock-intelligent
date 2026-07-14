@@ -141,16 +141,16 @@ def opportunities(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[StockAnalysis]:
-    # A ticker/company search should always surface the match, even for
-    # technical-screen names whose modeled upside is 0 and would otherwise be
-    # hidden by the upside threshold.
+    # A ticker/company search should always surface the match, regardless of the
+    # upside threshold or the Stocks/ETFs toggle — otherwise a searched symbol
+    # (e.g. a leveraged ETF while "Stocks" is selected) silently returns nothing.
     effective_min_upside = -100.0 if search else min_upside
     filters = [
         StockAnalysis.id.in_(latest_ids()),
         Company.is_research_eligible.is_(True),
         StockAnalysis.upside_pct >= effective_min_upside,
     ]
-    if asset_type != "all":
+    if asset_type != "all" and not search:
         filters.append(Company.asset_type == asset_type)
     if min_price is not None:
         filters.append(StockAnalysis.current_price >= min_price)
