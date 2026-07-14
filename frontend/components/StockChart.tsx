@@ -88,8 +88,13 @@ const INDICATORS: Array<{ key: Overlay; label: string; color?: string }> = [
 
 export default function StockChart({ history }: { history: PricePoint[] }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const priceSvgRef = useRef<SVGSVGElement | null>(null);
   const [hover, setHover] = useState<{ index: number; px: number; py: number } | null>(null);
   const [show, setShow] = useState<Record<Overlay, boolean>>(DEFAULT_SHOW);
+  const [view, setView] = useState<{ s: number; e: number } | null>(null);
+  const [brush, setBrush] = useState<{ start: number; cur: number } | null>(null);
+
+  const wheelRef = useRef<((event: WheelEvent) => void) | null>(null);
 
   useEffect(() => {
     try {
@@ -98,6 +103,16 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
     } catch {
       /* ignore unavailable storage */
     }
+  }, []);
+  useEffect(() => {
+    const svg = priceSvgRef.current;
+    if (!svg) return;
+    const handler = (event: WheelEvent) => {
+      event.preventDefault();
+      wheelRef.current?.(event);
+    };
+    svg.addEventListener("wheel", handler, { passive: false });
+    return () => svg.removeEventListener("wheel", handler);
   }, []);
   const toggle = (key: Overlay) =>
     setShow((current) => {
@@ -178,23 +193,45 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
   }
 
   const count = history.length;
-  const range = model.max - model.min || 1;
-  const x = (index: number) => PAD_L + (index / (count - 1)) * (W - PAD_L - PAD_R);
-  const y = (value: number) => PAD_T + ((model.max - value) / range) * (PRICE_H - PAD_T * 2);
-  const bandWidth = Math.max(1.4, (W - PAD_L - PAD_R) / count - 1.2);
+  // visible window (zoom). null → full range.
+  const vs = view ? Math.max(0, Math.min(view.s, count - 2)) : 0;
+  const ve = view ? Math.max(vs + 1, Math.min(view.e, count - 1)) : count - 1;
+  const vspan = ve - vs;
+  const inView = (index: number) => index >= vs && index <= ve;
+
+  // y-range recomputed over just the visible window so zoom fills the frame
+  const vis: number[] = [];
+  for (let i = vs; i <= ve; i += 1) {
+    vis.push(model.highs[i], model.lows[i]);
+    if (show.bb) {
+      if (model.bbUpper[i] != null) vis.push(model.bbUpper[i] as number);
+      if (model.bbLower[i] != null) vis.push(model.bbLower[i] as number);
+    }
+    if (show.sma20 && model.sma20[i] != null) vis.push(model.sma20[i] as number);
+    if (show.sma50 && model.sma50[i] != null) vis.push(model.sma50[i] as number);
+    if (show.sma100 && model.sma100[i] != null) vis.push(model.sma100[i] as number);
+    if (show.sma200 && model.sma200[i] != null) vis.push(model.sma200[i] as number);
+  }
+  const vmax = Math.max(...vis);
+  const vmin = Math.min(...vis);
+  const range = vmax - vmin || 1;
+  const x = (index: number) => PAD_L + ((index - vs) / vspan) * (W - PAD_L - PAD_R);
+  const y = (value: number) => PAD_T + ((vmax - value) / range) * (PRICE_H - PAD_T * 2);
+  const bandWidth = Math.max(1.2, (W - PAD_L - PAD_R) / (vspan + 1) - 1.2);
+  const maxVolume = Math.max(...history.slice(vs, ve + 1).map((p) => p.volume ?? 0), 1);
 
   const line = (values: Array<number | null>) =>
     values
-      .map((value, index) => (value === null ? null : `${x(index).toFixed(1)},${y(value).toFixed(1)}`))
+      .map((value, index) => (value === null || !inView(index) ? null : `${x(index).toFixed(1)},${y(value).toFixed(1)}`))
       .filter(Boolean)
       .join(" ");
 
   const bandPath = (() => {
     const upper = model.bbUpper
-      .map((value, index) => (value === null ? null : `${x(index).toFixed(1)},${y(value).toFixed(1)}`))
+      .map((value, index) => (value === null || !inView(index) ? null : `${x(index).toFixed(1)},${y(value).toFixed(1)}`))
       .filter(Boolean);
     const lower = model.bbLower
-      .map((value, index) => (value === null ? null : `${x(index).toFixed(1)},${y(value).toFixed(1)}`))
+      .map((value, index) => (value === null || !inView(index) ? null : `${x(index).toFixed(1)},${y(value).toFixed(1)}`))
       .filter(Boolean)
       .reverse();
     if (!upper.length) return "";
@@ -203,60 +240,116 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
 
   const rsiY = (value: number) => 10 + ((100 - value) / 100) * (RSI_H - 20);
   const macdRange = Math.max(
-    ...model.macd.map(Math.abs),
-    ...model.macdSignal.map(Math.abs),
-    ...model.histogram.map(Math.abs),
+    ...model.macd.slice(vs, ve + 1).map(Math.abs),
+    ...model.macdSignal.slice(vs, ve + 1).map(Math.abs),
+    ...model.histogram.slice(vs, ve + 1).map(Math.abs),
     0.01,
   );
   const macdMid = MACD_H / 2;
   const macdY = (value: number) => macdMid - (value / macdRange) * (macdMid - 12);
   const macdLine = (values: number[]) =>
-    values.map((value, index) => `${x(index).toFixed(1)},${macdY(value).toFixed(1)}`).join(" ");
+    values
+      .map((value, index) => (inView(index) ? `${x(index).toFixed(1)},${macdY(value).toFixed(1)}` : null))
+      .filter(Boolean)
+      .join(" ");
 
-  const priceTicks = [0, 0.25, 0.5, 0.75, 1].map((fraction) => model.min + range * fraction);
-  const dateTickIndexes = [0, Math.floor(count / 4), Math.floor(count / 2), Math.floor((3 * count) / 4), count - 1];
+  const priceTicks = [0, 0.25, 0.5, 0.75, 1].map((fraction) => vmin + range * fraction);
+  const dateTickIndexes = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(vs + f * vspan));
+
+  const pointerIndex = (clientX: number, target: SVGSVGElement) => {
+    const rect = target.getBoundingClientRect();
+    const relative = ((clientX - rect.left) / rect.width) * W;
+    const fraction = Math.min(1, Math.max(0, (relative - PAD_L) / (W - PAD_L - PAD_R)));
+    return Math.round(vs + fraction * vspan);
+  };
 
   const onMove = (event: React.MouseEvent<SVGSVGElement>) => {
-    const svg = event.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    const relative = ((event.clientX - rect.left) / rect.width) * W;
-    const fraction = Math.min(1, Math.max(0, (relative - PAD_L) / (W - PAD_L - PAD_R)));
-    const index = Math.round(fraction * (count - 1));
+    const index = pointerIndex(event.clientX, event.currentTarget);
     const wrapRect = wrapRef.current?.getBoundingClientRect();
     setHover({
       index,
       px: wrapRect ? event.clientX - wrapRect.left : 0,
       py: wrapRect ? event.clientY - wrapRect.top : 0,
     });
+    if (brush) setBrush({ ...brush, cur: index });
+  };
+
+  const onDown = (event: React.MouseEvent<SVGSVGElement>) => {
+    const index = pointerIndex(event.clientX, event.currentTarget);
+    setBrush({ start: index, cur: index });
+  };
+  const onUp = () => {
+    if (brush) {
+      const s = Math.min(brush.start, brush.cur);
+      const e = Math.max(brush.start, brush.cur);
+      if (e - s >= 4) setView({ s, e });
+      setBrush(null);
+    }
+  };
+
+  const zoom = (factor: number, center: number) => {
+    const newSpan = Math.max(10, Math.min(count - 1, Math.round(vspan * factor)));
+    const ratio = (center - vs) / vspan || 0.5;
+    let s = Math.round(center - ratio * newSpan);
+    s = Math.max(0, Math.min(s, count - 1 - newSpan));
+    setView(newSpan >= count - 1 ? null : { s, e: s + newSpan });
+  };
+
+  const presets: Array<{ label: string; days: number | null }> = [
+    { label: "1M", days: 21 }, { label: "3M", days: 63 }, { label: "6M", days: 126 },
+    { label: "1Y", days: 252 }, { label: "All", days: null },
+  ];
+  const applyPreset = (days: number | null) => {
+    if (days === null || days >= count) setView(null);
+    else setView({ s: count - 1 - days, e: count - 1 });
   };
 
   const hovered = hover ? history[hover.index] : null;
-
   const canCandles = model.hasOhlc && show.candles;
+  wheelRef.current = (event: WheelEvent) => {
+    const svg = priceSvgRef.current;
+    if (!svg) return;
+    zoom(event.deltaY < 0 ? 0.82 : 1.22, pointerIndex(event.clientX, svg));
+  };
+  const zoomed = view !== null;
 
   return (
     <div className="chartShell">
-      <div className="indicatorPicker">
-        {INDICATORS.map((ind) => (
-          <button
-            key={ind.key}
-            className={`indChip${show[ind.key] ? " on" : ""}`}
-            onClick={() => toggle(ind.key)}
-            aria-pressed={show[ind.key]}
-          >
-            {ind.color && <i style={{ background: ind.color }} />}
-            {ind.label}
-          </button>
-        ))}
+      <div className="chartTools">
+        <div className="indicatorPicker">
+          {INDICATORS.map((ind) => (
+            <button
+              key={ind.key}
+              className={`indChip${show[ind.key] ? " on" : ""}`}
+              onClick={() => toggle(ind.key)}
+              aria-pressed={show[ind.key]}
+            >
+              {ind.color && <i style={{ background: ind.color }} />}
+              {ind.label}
+            </button>
+          ))}
+        </div>
+        <div className="rangePicker">
+          {presets.map((preset) => (
+            <button key={preset.label} className="rangeBtn" onClick={() => applyPreset(preset.days)}>
+              {preset.label}
+            </button>
+          ))}
+          {zoomed && <button className="rangeBtn rangeBtn--reset" onClick={() => setView(null)}>Reset ✕</button>}
+        </div>
       </div>
       <div className="chartWrap" ref={wrapRef}>
         <svg
+          ref={priceSvgRef}
           className="stockChart"
+          style={{ cursor: brush ? "ew-resize" : "crosshair", touchAction: "none" }}
           viewBox={`0 0 ${W} ${PRICE_H + VOL_H}`}
           role="img"
-          aria-label="One year price chart with selectable moving averages, Bollinger bands, and volume"
+          aria-label="Zoomable price chart with selectable moving averages, Bollinger bands, and volume. Scroll to zoom, drag to select a range."
           onMouseMove={onMove}
-          onMouseLeave={() => setHover(null)}
+          onMouseLeave={() => { setHover(null); setBrush(null); }}
+          onMouseDown={onDown}
+          onMouseUp={onUp}
         >
           {priceTicks.map((tick) => (
             <g key={tick}>
@@ -268,7 +361,8 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
           {show.bb && <polyline points={line(model.bbUpper)} fill="none" stroke={COLORS.bb} strokeWidth="1" strokeDasharray="3 4" opacity="0.7" />}
           {show.bb && <polyline points={line(model.bbLower)} fill="none" stroke={COLORS.bb} strokeWidth="1" strokeDasharray="3 4" opacity="0.7" />}
           {show.volume && history.map((point, index) => {
-            const barHeight = ((point.volume ?? 0) / model.maxVolume) * (VOL_H - 8);
+            if (!inView(index)) return null;
+            const barHeight = ((point.volume ?? 0) / maxVolume) * (VOL_H - 8);
             const upDay = index > 0 && model.closes[index] >= model.closes[index - 1];
             return (
               <rect
@@ -283,6 +377,7 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
           })}
           {canCandles
             ? history.map((point, index) => {
+                if (!inView(index)) return null;
                 const open = Number(point.open ?? point.close);
                 const close = model.closes[index];
                 const upDay = close >= open;
@@ -306,6 +401,18 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
               {history[index].date}
             </text>
           ))}
+          {brush && Math.abs(brush.cur - brush.start) >= 1 && (
+            <rect
+              x={x(Math.min(brush.start, brush.cur))}
+              y={PAD_T}
+              width={Math.abs(x(brush.cur) - x(brush.start))}
+              height={PRICE_H + VOL_H - PAD_T}
+              fill="#5aa2ff22"
+              stroke="#5aa2ff"
+              strokeWidth="0.8"
+              strokeDasharray="4 3"
+            />
+          )}
           {hover && (
             <line x1={x(hover.index)} x2={x(hover.index)} y1={PAD_T} y2={PRICE_H + VOL_H} stroke="#8a97a8" strokeWidth="0.7" strokeDasharray="3 3" />
           )}
@@ -345,7 +452,7 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
         ))}
         <rect x={PAD_L} y={rsiY(70)} width={W - PAD_L - PAD_R} height={rsiY(30) - rsiY(70)} fill="#5aa2ff0f" />
         <polyline
-          points={model.rsi.map((value, index) => (value === null ? null : `${x(index).toFixed(1)},${rsiY(value).toFixed(1)}`)).filter(Boolean).join(" ")}
+          points={model.rsi.map((value, index) => (value === null || !inView(index) ? null : `${x(index).toFixed(1)},${rsiY(value).toFixed(1)}`)).filter(Boolean).join(" ")}
           fill="none"
           stroke={COLORS.sma100}
           strokeWidth="1.6"
@@ -365,6 +472,7 @@ export default function StockChart({ history }: { history: PricePoint[] }) {
       <svg className="stockChart" viewBox={`0 0 ${W} ${MACD_H}`} role="img" aria-label="Impulse MACD histogram with MACD and signal lines">
         <line x1={PAD_L} x2={W - PAD_R} y1={macdMid} y2={macdMid} className="gridLine" />
         {model.histogram.map((value, index) => {
+          if (!inView(index)) return null;
           const barY = macdY(value);
           const color = model.impulse[index] === "up" ? COLORS.up : model.impulse[index] === "down" ? COLORS.down : COLORS.neutral;
           return (

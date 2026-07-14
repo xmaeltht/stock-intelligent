@@ -231,6 +231,18 @@ tbody tr:last-child td { border-bottom: 0; }
   box-shadow: inset 0 1px 0 var(--hi), 0 3px 12px -4px rgba(0,0,0,.5); }
 .indChip.on i { opacity: 1; }
 
+/* chart toolbar: indicator picker + range presets */
+.chartTools { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.chartTools .indicatorPicker { margin-bottom: 0; flex: 1 1 auto; }
+.rangePicker { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rangeBtn { padding: 6px 11px; border-radius: 9px; border: 1px solid var(--glass-border);
+  background: var(--glass); color: var(--faint); font: 700 11.5px var(--mono); letter-spacing: .02em;
+  cursor: pointer; transition: all .15s; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.rangeBtn:hover { color: var(--text); border-color: var(--glass-border-2); transform: translateY(-1px); }
+.rangeBtn:active { transform: translateY(0); }
+.rangeBtn--reset { color: var(--price, #5aa2ff); border-color: rgba(90,162,255,.35); background: rgba(90,162,255,.1); }
+.rangeBtn--reset:hover { background: rgba(90,162,255,.18); }
+
 /* ── panels / cards ── */
 .panel { border-radius: var(--radius); padding: 19px 21px; transition: border-color .25s, box-shadow .25s; }
 .panelTitle { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; margin-bottom: 14px; }
@@ -283,7 +295,7 @@ tbody tr:last-child td { border-bottom: 0; }
   border: 1px solid var(--glass-border-2); border-radius: 12px; padding: 10px 13px; font: 11px var(--mono); line-height: 1.7; z-index: 30;
   box-shadow: 0 12px 34px rgba(0,0,0,.55); white-space: nowrap; }
 .chartTip b { color: var(--text); }
-.chartWrap { position: relative; }
+.chartWrap { position: relative; margin-top: 12px; }
 
 /* detail two-column evidence */
 .detailGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
