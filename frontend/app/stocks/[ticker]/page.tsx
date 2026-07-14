@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import TopNav from "../../../components/TopNav";
 import StockChart from "../../../components/StockChart";
+import DividendSection from "../../../components/DividendSection";
 import {
   compact,
   fetchWatchlistTickers,
@@ -359,25 +360,6 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
                 </dl>
               </section>
               <section className="panel">
-                <div className="panelTitle"><h2>Dividend</h2><span className="eyebrow">Per share · yield · growth</span></div>
-                {fundamentals.dividend?.pays ? (
-                  <>
-                    <dl className="facts">
-                      <div><dt>Dividend / share (annual)</dt><dd>{money(fundamentals.dividend.per_share)}</dd></div>
-                      <div><dt>Dividend yield</dt><dd className="up">{fundamentals.dividend.yield_pct != null ? `${fundamentals.dividend.yield_pct}%` : "—"}</dd></div>
-                      <div><dt>Growth (YoY)</dt><dd className={(fundamentals.dividend.growth_yoy_pct ?? 0) >= 0 ? "up" : "down"}>{fundamentals.dividend.growth_yoy_pct != null ? `${fundamentals.dividend.growth_yoy_pct > 0 ? "+" : ""}${fundamentals.dividend.growth_yoy_pct}%` : "—"}</dd></div>
-                      <div><dt>Growth (multi-year CAGR)</dt><dd>{fundamentals.dividend.cagr_pct != null ? `${fundamentals.dividend.cagr_pct}%` : "—"}</dd></div>
-                      <div><dt>Payout ratio</dt><dd>{fundamentals.dividend.payout_ratio_pct != null ? `${fundamentals.dividend.payout_ratio_pct}%` : "—"}</dd></div>
-                    </dl>
-                    <FiscalBars title="Dividend / share history" series={fundamentals.dividend.history ?? []} />
-                  </>
-                ) : (
-                  <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-                    No common-stock dividend reported in recent SEC annual filings — this security does not currently pay a dividend.
-                  </p>
-                )}
-              </section>
-              <section className="panel">
                 <div className="panelTitle"><h2>Fiscal-year trend</h2><span className="eyebrow">From SEC annual filings</span></div>
                 <FiscalBars title="Revenue" series={fundamentals.revenue_history ?? []} />
                 <FiscalBars title="Net income" series={fundamentals.net_income_history ?? []} />
@@ -410,6 +392,8 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
               {data.thesis_breakers.map((breaker) => <li key={breaker}>{breaker}</li>)}
             </ul>
           </section>
+
+          <DividendSection dividend={fundamentals.dividend} price={Number(data.current_price)} />
 
           <section className="panel" style={{ gridColumn: "1 / -1" }}>
             <div className="panelTitle"><h2>Analysis history</h2><span className="eyebrow">How the model rating evolved</span></div>

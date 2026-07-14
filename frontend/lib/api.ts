@@ -81,12 +81,22 @@ export type Fundamentals = {
   revenue_cagr_pct?: number | null;
   dividend?: {
     pays?: boolean;
-    per_share?: number | null;
+    source?: string | null;
+    annual_amount_ttm?: number | null;
+    forward_annual?: number | null;
     yield_pct?: number | null;
+    forward_yield_pct?: number | null;
+    frequency?: string | null;
+    payments_per_year?: number | null;
+    last_ex_date?: string | null;
+    last_amount?: number | null;
+    growth_1y_pct?: number | null;
+    growth_streak_years?: number;
     payout_ratio_pct?: number | null;
-    growth_yoy_pct?: number | null;
-    cagr_pct?: number | null;
-    history?: Array<{ fy_end: string; value: number }>;
+    buyback_yield_pct?: number | null;
+    shareholder_yield_pct?: number | null;
+    payments?: Array<{ date: string; amount: number }>;
+    annual?: Array<{ year: string; value: number }>;
   };
   margins?: {
     gross_pct?: number | null;

@@ -282,6 +282,20 @@ def extract_financials(facts: dict) -> dict[str, object]:
     dividend_per_share, previous_dividend_per_share = annual_pair(
         facts, DIVIDEND_TAGS, DIVIDEND_UNITS
     )
+    stock_repurchases, _ = annual_pair(
+        facts,
+        (
+            "PaymentsForRepurchaseOfCommonStock",
+            "PaymentsForRepurchaseOfEquity",
+        ),
+    )
+    stock_issuance, _ = annual_pair(
+        facts,
+        (
+            "ProceedsFromIssuanceOfCommonStock",
+            "ProceedsFromIssuanceOfSharesUnderIncentiveAndShareBasedCompensationPlans",
+        ),
+    )
     free_cash_flow = None
     if operating_cash_flow is not None:
         free_cash_flow = operating_cash_flow - (capex or Decimal("0"))
@@ -300,6 +314,8 @@ def extract_financials(facts: dict) -> dict[str, object]:
         "gross_profit": gross_profit,
         "dividend_per_share": dividend_per_share,
         "previous_dividend_per_share": previous_dividend_per_share,
+        "stock_repurchases": stock_repurchases,
+        "stock_issuance": stock_issuance,
         "revenue_history": annual_history(facts, REVENUE_TAGS),
         "net_income_history": annual_history(facts, NET_INCOME_TAGS),
         "dividend_history": annual_history(facts, DIVIDEND_TAGS, DIVIDEND_UNITS),

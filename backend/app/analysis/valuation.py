@@ -48,6 +48,8 @@ EMPTY_FINANCIALS: dict[str, object] = {
     "gross_profit": None,
     "dividend_per_share": None,
     "previous_dividend_per_share": None,
+    "stock_repurchases": None,
+    "stock_issuance": None,
     "revenue_history": [],
     "net_income_history": [],
     "dividend_history": [],

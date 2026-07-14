@@ -2,7 +2,7 @@ import csv
 import io
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError
@@ -27,6 +27,9 @@ class PriceQuote:
     volume: int | None
     history: list[dict[str, object]]
     source_url: str
+    # Per-payment cash dividend events [{date, amount}], oldest first. Only Yahoo
+    # supplies these; other providers leave it empty.
+    dividends: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -51,7 +54,10 @@ def _clean_number(raw: object) -> float | None:
 
 
 def _quote_from_history(
-    symbol: str, history: list[dict[str, object]], source_url: str
+    symbol: str,
+    history: list[dict[str, object]],
+    source_url: str,
+    dividends: list[dict[str, object]] | None = None,
 ) -> PriceQuote:
     history.sort(key=lambda point: str(point["date"]))
     latest = history[-1]
@@ -62,6 +68,7 @@ def _quote_from_history(
         volume=int(latest["volume"]) if latest["volume"] is not None else None,
         history=history,
         source_url=source_url,
+        dividends=sorted(dividends or [], key=lambda item: str(item["date"])),
     )
 
 
@@ -240,9 +247,10 @@ class NasdaqProvider:
         return _quote_from_history(ticker, history, url)
 
     def _yahoo_price(self, ticker: str) -> PriceQuote:
+        # 2y of daily bars gives a richer chart and ~8 quarters of dividend events.
         url = (
             f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-            "?range=1y&interval=1d&events=history"
+            "?range=2y&interval=1d&events=div"
         )
         request = Request(
             url,
@@ -291,7 +299,20 @@ class NasdaqProvider:
             )
         if not history:
             raise ValueError(f"No usable ETF chart history available for {ticker}")
-        return _quote_from_history(ticker, history, url)
+        dividends: list[dict[str, object]] = []
+        raw_dividends = ((result.get("events") or {}).get("dividends") or {}).values()
+        for event in raw_dividends:
+            amount = event.get("amount")
+            timestamp = event.get("date")
+            if amount is None or timestamp is None:
+                continue
+            dividends.append(
+                {
+                    "date": datetime.fromtimestamp(int(timestamp), tz=UTC).date().isoformat(),
+                    "amount": float(amount),
+                }
+            )
+        return _quote_from_history(ticker, history, url, dividends)
 
     def _stooq_price(self, ticker: str) -> PriceQuote:
         """Full daily OHLCV history fallback from Stooq."""

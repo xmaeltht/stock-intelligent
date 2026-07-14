@@ -9,6 +9,7 @@ from urllib.error import HTTPError
 
 from sqlalchemy import func, or_, select
 
+from app.analysis.dividends import build_dividend_profile
 from app.analysis.etf import build_etf_analysis, build_technical_screen
 from app.analysis.sectors import classify_sector
 from app.analysis.technicals import build_technical_indicators
@@ -187,6 +188,28 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
                     {"name": "Nasdaq delayed market price", "url": quote.source_url},
                     {"name": "SEC Company Universe", "url": SEC_TICKERS_URL},
                 ]
+        # Attach a rich dividend profile (real per-payment events + SEC history)
+        # on every path, including ETFs and technical-only stocks.
+        shares = financials.get("shares_outstanding")
+        eps_value = financials.get("eps")
+        repurchases = financials.get("stock_repurchases")
+        issuance = financials.get("stock_issuance")
+        buyback_net = (
+            float(repurchases) - float(issuance or 0) if repurchases is not None else None
+        )
+        dividend_profile = build_dividend_profile(
+            quote.dividends,
+            float(quote.close),
+            eps=float(eps_value) if eps_value else None,
+            market_cap=float(quote.close) * float(shares) if shares else None,
+            buyback_net=buyback_net,
+            sec_annual_dps=financials.get("dividend_history") or [],
+        )
+        result["fundamentals"] = {
+            **(result.get("fundamentals") or {}),
+            "dividend": dividend_profile,
+        }
+
         analysis = StockAnalysis(
             company_id=company.id,
             as_of=datetime.now(UTC),
