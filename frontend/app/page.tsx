@@ -363,6 +363,12 @@ export default function Dashboard() {
             Rank by
             <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
               <option value="rating">Rating (Strong Buy first)</option>
+              <option value="factor_composite">Factor: Composite</option>
+              <option value="factor_value">Factor: Value</option>
+              <option value="factor_quality">Factor: Quality</option>
+              <option value="factor_momentum">Factor: Momentum</option>
+              <option value="factor_growth">Factor: Growth</option>
+              <option value="factor_income">Factor: Income (yield)</option>
               <option value="score">Opportunity score</option>
               <option value="upside">Upside</option>
               <option value="change_1d">1D change</option>
@@ -423,6 +429,7 @@ export default function Dashboard() {
                 <th className={`r sortable${sortBy === "upside" ? " sorted" : ""}`} onClick={() => toggleSort("upside")} title="Potential upside from the current price to the modeled fair value">Upside{arrow("upside")}</th>
                 <th className={`r sortable${sortBy === "volume" ? " sorted" : ""}`} onClick={() => toggleSort("volume")}>Volume{arrow("volume")}</th>
                 <th className={`r sortable${sortBy === "score" ? " sorted" : ""}`} onClick={() => toggleSort("score")}>Score{arrow("score")}</th>
+                <th className={`r sortable${sortBy.startsWith("factor") ? " sorted" : ""}`} onClick={() => toggleSort("factor_composite")} title="Composite factor score">Factor{arrow("factor_composite")}</th>
                 <th className={`sortable${sortBy === "rating" ? " sorted" : ""}`} onClick={() => toggleSort("rating")}>Rating{arrow("rating")}</th>
                 <th className={`sortable${sortBy === "signal" ? " sorted" : ""}`} onClick={() => toggleSort("signal")}>Signal{arrow("signal")}</th>
                 <th className={`sortable${sortBy === "rsi" ? " sorted" : ""}`} onClick={() => toggleSort("rsi")}>RSI{arrow("rsi")}</th>
@@ -489,6 +496,15 @@ export default function Dashboard() {
                       <b className={`scoreBadge${item.opportunity_score >= 70 ? " scoreBadge--hi" : item.opportunity_score >= 45 ? " scoreBadge--mid" : ""}`}>
                         {item.opportunity_score}
                       </b>
+                    </td>
+                    <td className="r">
+                      {item.factor_scores?.composite != null ? (
+                        <b className={`factorChip${item.factor_scores.composite >= 66 ? " factorChip--hi" : item.factor_scores.composite <= 34 ? " factorChip--lo" : ""}`}>
+                          {item.factor_scores.composite}
+                        </b>
+                      ) : (
+                        <span className="dim">—</span>
+                      )}
                     </td>
                     <td>
                       <span className={`ratingBadge rating--${rating.slug}`}>{rating.label}</span>

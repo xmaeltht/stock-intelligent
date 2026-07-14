@@ -41,6 +41,7 @@ LIST_COLUMNS = (
     StockAnalysis.risk_level,
     StockAnalysis.qualification,
     StockAnalysis.technical_indicators,
+    StockAnalysis.factor_scores,
     StockAnalysis.catalysts,
 )
 
@@ -198,6 +199,12 @@ def opportunities(
         "rsi",
         "confidence",
         "risk",
+        "factor_composite",
+        "factor_value",
+        "factor_quality",
+        "factor_momentum",
+        "factor_growth",
+        "factor_income",
     ] = "rating",
     sort_order: Literal["asc", "desc"] = "desc",
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
@@ -276,6 +283,12 @@ def opportunities(
         "rsi": indicators_json["rsi14"].as_float(),
         "confidence": confidence_rank,
         "risk": risk_rank,
+        "factor_composite": StockAnalysis.factor_scores["composite"].as_float(),
+        "factor_value": StockAnalysis.factor_scores["value"].as_float(),
+        "factor_quality": StockAnalysis.factor_scores["quality"].as_float(),
+        "factor_momentum": StockAnalysis.factor_scores["momentum"].as_float(),
+        "factor_growth": StockAnalysis.factor_scores["growth"].as_float(),
+        "factor_income": StockAnalysis.factor_scores["income"].as_float(),
     }
     sort_column = sort_columns[sort_by]
     ordering = sort_column.asc() if sort_order == "asc" else sort_column.desc()
@@ -667,6 +680,56 @@ def stock_detail(ticker: str, db: Annotated[Session, Depends(get_db)]) -> StockA
     if analysis is None:
         raise HTTPException(status_code=404, detail="No analysis exists for this ticker")
     return analysis
+
+
+FACTOR_KEYS = ("value", "quality", "momentum", "growth", "income", "composite")
+
+
+@router.get("/stocks/{ticker}/factors")
+def stock_factors(ticker: str, db: Annotated[Session, Depends(get_db)]) -> dict:
+    """Factor scores for a ticker plus its percentile rank within its own sector."""
+    settings = get_settings()
+    row = db.execute(
+        select(StockAnalysis.factor_scores, Company.sector)
+        .join(Company, Company.id == StockAnalysis.company_id)
+        .where(Company.ticker == ticker.upper())
+        .order_by(StockAnalysis.as_of.desc())
+        .limit(1)
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="No analysis exists for this ticker")
+    scores, sector = row
+    scores = scores or {}
+
+    peer_rows = db.execute(
+        select(StockAnalysis.factor_scores)
+        .join(Company, Company.id == StockAnalysis.company_id)
+        .where(
+            StockAnalysis.id.in_(latest_ids()),
+            *eligible_conditions(settings),
+            Company.sector == sector,
+        )
+    ).all()
+    peers = [item[0] or {} for item in peer_rows]
+
+    percentiles: dict[str, int] = {}
+    for key in FACTOR_KEYS:
+        mine = scores.get(key)
+        if not isinstance(mine, int | float):
+            continue
+        values = [p[key] for p in peers if isinstance(p.get(key), int | float)]
+        if not values:
+            continue
+        rank = sum(1 for value in values if value <= mine)
+        percentiles[key] = round(rank / len(values) * 100)
+
+    return {
+        "ticker": ticker.upper(),
+        "sector": sector or "Unclassified",
+        "peer_count": len(peers),
+        "scores": {key: scores.get(key) for key in FACTOR_KEYS},
+        "sector_percentiles": percentiles,
+    }
 
 
 @router.get("/stocks/{ticker}/history", response_model=list[AnalysisHistoryPoint])

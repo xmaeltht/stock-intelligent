@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import TopNav from "../../../components/TopNav";
 import StockChart from "../../../components/StockChart";
 import DividendSection from "../../../components/DividendSection";
+import FactorRadar from "../../../components/FactorRadar";
 import {
   compact,
   fetchWatchlistTickers,
@@ -398,6 +399,8 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
               {data.thesis_breakers.map((breaker) => <li key={breaker}>{breaker}</li>)}
             </ul>
           </section>
+
+          <FactorRadar ticker={data.company.ticker} fallback={data.factor_scores} />
 
           <DividendSection dividend={fundamentals.dividend} price={Number(data.current_price)} />
 

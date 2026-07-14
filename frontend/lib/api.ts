@@ -44,10 +44,28 @@ export type TechnicalIndicators = {
 
 export type Catalyst = { category?: string; title: string; detail: string; status: string };
 
+export type FactorScores = {
+  value?: number;
+  quality?: number;
+  momentum?: number;
+  growth?: number;
+  income?: number;
+  composite?: number;
+};
+
+export type FactorsResponse = {
+  ticker: string;
+  sector: string;
+  peer_count: number;
+  scores: FactorScores;
+  sector_percentiles: Partial<Record<keyof FactorScores, number>>;
+};
+
 export type ListItem = {
   company: CompanyBrief;
   as_of: string;
   price_as_of: string | null;
+  factor_scores?: FactorScores;
   price_date: string;
   current_price: string;
   volume: number | null;

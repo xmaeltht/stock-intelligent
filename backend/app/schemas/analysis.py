@@ -30,6 +30,7 @@ class AnalysisListItem(BaseModel):
     risk_level: str
     qualification: str
     technical_indicators: dict[str, object]
+    factor_scores: dict[str, object] = {}
     catalysts: list[dict[str, object]]
 
 
@@ -43,6 +44,7 @@ class AnalysisRead(BaseModel):
     volume: int | None
     price_history: list[dict[str, object]]
     technical_indicators: dict[str, object]
+    factor_scores: dict[str, object] = {}
     revenue: Decimal | None
     revenue_growth_pct: float | None
     net_income: Decimal | None

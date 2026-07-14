@@ -37,6 +37,8 @@ class StockAnalysis(Base):
     volume: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     price_history: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list)
     technical_indicators: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    # Deterministic 0-100 factor scores: value/quality/momentum/growth/income/composite.
+    factor_scores: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
     revenue: Mapped[Decimal | None] = mapped_column(Numeric(24, 2))
     previous_revenue: Mapped[Decimal | None] = mapped_column(Numeric(24, 2))
     revenue_growth_pct: Mapped[float | None] = mapped_column(Float)

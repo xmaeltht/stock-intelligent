@@ -64,7 +64,8 @@ def test_parse_stooq_light_maps_symbols() -> None:
         "BRK-B.US,2026-07-14,21:00:00,400,405,399,404.2,1200000,Berkshire\n"
         "ZZZZ.US,N/D,N/D,N/D,N/D,N/D,N/D,N/D,N/D\n"
     )
-    quotes = parse_stooq_light(csv_text, {"aapl.us": "AAPL", "brk-b.us": "BRK-B", "zzzz.us": "ZZZZ"})
+    symbol_map = {"aapl.us": "AAPL", "brk-b.us": "BRK-B", "zzzz.us": "ZZZZ"}
+    quotes = parse_stooq_light(csv_text, symbol_map)
     by_symbol = {q.symbol: q for q in quotes}
     assert by_symbol["AAPL"].price == Decimal("214.5")
     assert by_symbol["AAPL"].volume == 50000000
@@ -96,7 +97,8 @@ def test_apply_live_quote_updates_price_upside_and_today_bar() -> None:
         volume=1000,
         price_history=[
             {"date": "2026-07-10", "open": 95, "high": 99, "low": 94, "close": 98, "volume": 900},
-            {"date": "2026-07-13", "open": 98, "high": 101, "low": 97, "close": 100, "volume": 1000},
+            {"date": "2026-07-13", "open": 98, "high": 101, "low": 97, "close": 100,
+             "volume": 1000},
         ],
         technical_indicators={"change_1d_pct": 0.0},
         fair_value=Decimal("150"),
@@ -125,7 +127,8 @@ def test_apply_live_quote_patches_same_day_bar() -> None:
         volume=1000,
         price_history=[
             {"date": "2026-07-13", "open": 98, "high": 101, "low": 97, "close": 99, "volume": 900},
-            {"date": "2026-07-14", "open": 100, "high": 102, "low": 98, "close": 100, "volume": 1000},
+            {"date": "2026-07-14", "open": 100, "high": 102, "low": 98, "close": 100,
+             "volume": 1000},
         ],
         technical_indicators={},
         fair_value=Decimal("120"),

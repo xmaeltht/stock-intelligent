@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.analysis.factors import build_factor_scores
 from app.analysis.technicals import build_technical_indicators
 from app.analysis.valuation import EMPTY_FINANCIALS, build_analysis
 from app.db.base import Base
@@ -77,9 +78,23 @@ def _seed(session_factory) -> None:
         }
     )
     result = build_analysis(financials, Decimal("15.95"))
+    factor_scores = build_factor_scores(
+        upside_pct=result["upside_pct"],
+        indicators=indicators,
+        fundamentals=result["fundamentals"],
+        dividend={},
+        net_income=60000000.0,
+        free_cash_flow=50000000.0,
+        cash=120000000.0,
+        debt=40000000.0,
+        equity=300000000.0,
+        revenue_growth_pct=result["revenue_growth_pct"],
+        price=15.95,
+    )
     with session_factory() as session:
         company = Company(
-            ticker="TEST", name="Test Corp", exchange="Nasdaq", cik="0000000001"
+            ticker="TEST", name="Test Corp", exchange="Nasdaq", cik="0000000001",
+            sector="Technology",
         )
         session.add(company)
         session.flush()
@@ -100,6 +115,7 @@ def _seed(session_factory) -> None:
                 debt=financials["debt"],
                 shares_outstanding=financials["shares_outstanding"],
                 eps=financials["eps"],
+                factor_scores=factor_scores,
                 sources=[{"name": "SEC", "url": "https://example.com"}],
                 **result,
             )
@@ -195,12 +211,35 @@ def test_search_ignores_asset_type_toggle(client: TestClient) -> None:
 
 
 def test_list_sorts_by_new_keys(client: TestClient) -> None:
-    for key in ("rating", "change_1d", "change_5d", "signal", "rsi", "confidence", "risk"):
+    for key in (
+        "rating", "change_1d", "change_5d", "signal", "rsi", "confidence", "risk",
+        "factor_composite", "factor_value", "factor_quality", "factor_momentum",
+    ):
         response = client.get(
             f"/api/v1/opportunities/list?min_upside=-100&sort_by={key}&sort_order=desc"
         )
         assert response.status_code == 200, (key, response.text[:200])
         assert response.json(), key
+
+
+def test_factor_scores_endpoint(client: TestClient) -> None:
+    response = client.get("/api/v1/opportunities/stocks/TEST/factors")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sector"] == "Technology"
+    assert set(payload["scores"]) >= {
+        "value", "quality", "momentum", "growth", "income", "composite",
+    }
+    # Sole security in its sector → 100th percentile on every factor it scores.
+    assert payload["sector_percentiles"]["composite"] == 100
+
+
+def test_list_includes_factor_scores(client: TestClient) -> None:
+    response = client.get("/api/v1/opportunities/list?min_upside=-100")
+    assert response.status_code == 200
+    rows = response.json()
+    assert rows and "factor_scores" in rows[0]
+    assert "composite" in rows[0]["factor_scores"]
 
 
 def test_ideas_endpoint_returns_two_lists(client: TestClient) -> None:

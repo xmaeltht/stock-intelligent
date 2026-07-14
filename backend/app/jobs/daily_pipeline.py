@@ -11,6 +11,7 @@ from sqlalchemy import func, or_, select
 
 from app.analysis.dividends import build_dividend_profile
 from app.analysis.etf import build_etf_analysis, build_technical_screen
+from app.analysis.factors import build_factor_scores
 from app.analysis.sectors import classify_sector
 from app.analysis.technicals import build_technical_indicators
 from app.analysis.valuation import EMPTY_FINANCIALS, build_analysis
@@ -205,12 +206,31 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
             buyback_net=buyback_net,
             sec_annual_dps=financials.get("dividend_history") or [],
         )
-        result["fundamentals"] = {
+        merged_fundamentals = {
             **(result.get("fundamentals") or {}),
             "dividend": dividend_profile,
         }
+        result["fundamentals"] = merged_fundamentals
+
+        # Deterministic multi-factor scores from the assembled evidence.
+        factor_scores = build_factor_scores(
+            upside_pct=result.get("upside_pct"),
+            indicators=indicators,
+            fundamentals=merged_fundamentals,
+            dividend=dividend_profile,
+            net_income=float(financials["net_income"]) if financials.get("net_income") else None,
+            free_cash_flow=(
+                float(financials["free_cash_flow"]) if financials.get("free_cash_flow") else None
+            ),
+            cash=float(financials["cash"]) if financials.get("cash") else None,
+            debt=float(financials["debt"]) if financials.get("debt") else None,
+            equity=float(financials["equity"]) if financials.get("equity") else None,
+            revenue_growth_pct=result.get("revenue_growth_pct"),
+            price=float(quote.close),
+        )
 
         analysis = StockAnalysis(
+            factor_scores=factor_scores,
             company_id=company.id,
             as_of=datetime.now(UTC),
             price_date=quote.date,
