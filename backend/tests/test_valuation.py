@@ -49,6 +49,51 @@ def test_profitable_company_uses_all_five_methods() -> None:
     assert result["upside_pct"] > 0
 
 
+def test_dividend_metrics_are_computed() -> None:
+    financials = _financials(
+        revenue=Decimal("1000000000"),
+        previous_revenue=Decimal("900000000"),
+        net_income=Decimal("150000000"),
+        free_cash_flow=Decimal("120000000"),
+        cash=Decimal("300000000"),
+        debt=Decimal("100000000"),
+        shares_outstanding=Decimal("100000000"),
+        eps=Decimal("2.00"),
+        equity=Decimal("900000000"),
+        dividend_per_share=Decimal("1.00"),
+        previous_dividend_per_share=Decimal("0.80"),
+        dividend_history=[
+            {"fy_end": "2022-12-31", "value": 0.70},
+            {"fy_end": "2023-12-31", "value": 0.80},
+            {"fy_end": "2024-12-31", "value": 1.00},
+        ],
+    )
+    result = build_analysis(financials, Decimal("50"))
+    dividend = result["fundamentals"]["dividend"]
+    assert dividend["pays"] is True
+    assert dividend["per_share"] == 1.0
+    assert dividend["yield_pct"] == 2.0  # 1.00 / 50
+    assert dividend["payout_ratio_pct"] == 50.0  # 1.00 / 2.00 EPS
+    assert dividend["growth_yoy_pct"] == 25.0  # 1.00 vs 0.80
+    assert dividend["cagr_pct"] is not None
+    titles = {catalyst["title"] for catalyst in result["catalysts"]}
+    assert "Dividend income" in titles
+
+
+def test_non_payer_has_no_dividend() -> None:
+    financials = _financials(
+        revenue=Decimal("500000000"),
+        previous_revenue=Decimal("400000000"),
+        net_income=Decimal("40000000"),
+        shares_outstanding=Decimal("50000000"),
+        eps=Decimal("0.80"),
+        equity=Decimal("300000000"),
+    )
+    result = build_analysis(financials, Decimal("20"))
+    assert result["fundamentals"]["dividend"]["pays"] is False
+    assert result["fundamentals"]["dividend"]["yield_pct"] is None
+
+
 def test_no_positive_financials_raises() -> None:
     with pytest.raises(ValueError):
         build_analysis(_financials(), Decimal("10"))

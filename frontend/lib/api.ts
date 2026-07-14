@@ -75,6 +75,15 @@ export type Fundamentals = {
   book_value_per_share?: number | null;
   market_cap?: number | null;
   revenue_cagr_pct?: number | null;
+  dividend?: {
+    pays?: boolean;
+    per_share?: number | null;
+    yield_pct?: number | null;
+    payout_ratio_pct?: number | null;
+    growth_yoy_pct?: number | null;
+    cagr_pct?: number | null;
+    history?: Array<{ fy_end: string; value: number }>;
+  };
   margins?: {
     gross_pct?: number | null;
     operating_pct?: number | null;

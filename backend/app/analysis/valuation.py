@@ -46,8 +46,11 @@ EMPTY_FINANCIALS: dict[str, object] = {
     "equity": None,
     "operating_income": None,
     "gross_profit": None,
+    "dividend_per_share": None,
+    "previous_dividend_per_share": None,
     "revenue_history": [],
     "net_income_history": [],
+    "dividend_history": [],
 }
 
 
@@ -89,6 +92,23 @@ def build_fundamentals(financials: dict[str, object], price: Decimal) -> dict[st
 
     market_cap = price * shares if shares else None
     book_value_per_share = _money(equity / shares) if equity is not None and shares else None
+
+    # ── Dividend evidence ──
+    dps = financials.get("dividend_per_share")
+    prev_dps = financials.get("previous_dividend_per_share")
+    dividend_history = financials.get("dividend_history") or []
+    pays_dividend = dps is not None and dps > 0
+    dividend_yield_pct = (
+        round(float(dps / price * 100), 2) if pays_dividend and price > 0 else None
+    )
+    payout_ratio_pct = (
+        round(float(dps / eps * 100), 1) if pays_dividend and eps and eps > 0 else None
+    )
+    dividend_growth_yoy_pct = (
+        round(float((dps / prev_dps - 1) * 100), 1)
+        if pays_dividend and prev_dps and prev_dps > 0
+        else None
+    )
     return {
         "revenue_history": financials.get("revenue_history") or [],
         "net_income_history": financials.get("net_income_history") or [],
@@ -100,6 +120,15 @@ def build_fundamentals(financials: dict[str, object], price: Decimal) -> dict[st
         ),
         "market_cap": float(market_cap) if market_cap is not None else None,
         "revenue_cagr_pct": _revenue_cagr(financials.get("revenue_history") or []),
+        "dividend": {
+            "pays": pays_dividend,
+            "per_share": float(dps) if pays_dividend else None,
+            "yield_pct": dividend_yield_pct,
+            "payout_ratio_pct": payout_ratio_pct,
+            "growth_yoy_pct": dividend_growth_yoy_pct,
+            "cagr_pct": _revenue_cagr(dividend_history),
+            "history": dividend_history,
+        },
         "margins": {
             "gross_pct": _margin_pct(gross_profit, revenue),
             "operating_pct": _margin_pct(operating_income, revenue),
@@ -279,6 +308,20 @@ def build_analysis(financials: dict[str, object], price: Decimal) -> dict:
                 "category": "Financial",
                 "title": "Strong operating margin",
                 "detail": f"Operating income is {operating_margin:.1f}% of revenue.",
+                "status": "Confirmed",
+            }
+        )
+    dividend = fundamentals.get("dividend") or {}
+    if dividend.get("pays") and isinstance(dividend.get("yield_pct"), int | float):
+        growth = dividend.get("growth_yoy_pct")
+        detail = f"Pays a {dividend['yield_pct']:.2f}% dividend yield"
+        if isinstance(growth, int | float) and growth > 0:
+            detail += f", raised {growth:.1f}% year over year"
+        catalysts.append(
+            {
+                "category": "Financial",
+                "title": "Dividend income",
+                "detail": f"{detail}.",
                 "status": "Confirmed",
             }
         )

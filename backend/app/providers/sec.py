@@ -199,6 +199,13 @@ NET_INCOME_TAGS = (
     "NetIncomeLossAvailableToCommonStockholdersBasic",
     "ProfitLossAttributableToOwnersOfParent",
 )
+DIVIDEND_TAGS = (
+    "CommonStockDividendsPerShareDeclared",
+    "CommonStockDividendsPerShareCashPaid",
+    "DividendsPerShareDeclared",
+    "DividendsPaid",
+)
+DIVIDEND_UNITS = ("USD/shares", "USD / shares")
 
 
 def extract_financials(facts: dict) -> dict[str, object]:
@@ -262,6 +269,9 @@ def extract_financials(facts: dict) -> dict[str, object]:
         facts, ("OperatingIncomeLoss", "ProfitLossFromOperatingActivities")
     )
     gross_profit, _ = annual_pair(facts, ("GrossProfit",))
+    dividend_per_share, previous_dividend_per_share = annual_pair(
+        facts, DIVIDEND_TAGS, DIVIDEND_UNITS
+    )
     free_cash_flow = None
     if operating_cash_flow is not None:
         free_cash_flow = operating_cash_flow - (capex or Decimal("0"))
@@ -278,6 +288,9 @@ def extract_financials(facts: dict) -> dict[str, object]:
         "equity": equity,
         "operating_income": operating_income,
         "gross_profit": gross_profit,
+        "dividend_per_share": dividend_per_share,
+        "previous_dividend_per_share": previous_dividend_per_share,
         "revenue_history": annual_history(facts, REVENUE_TAGS),
         "net_income_history": annual_history(facts, NET_INCOME_TAGS),
+        "dividend_history": annual_history(facts, DIVIDEND_TAGS, DIVIDEND_UNITS),
     }
