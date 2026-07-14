@@ -183,3 +183,12 @@ def test_search_ignores_upside_threshold(client: TestClient) -> None:
         "/api/v1/opportunities/list?search=Test&min_upside=95"
     ).json()
     assert any(row["company"]["ticker"] == "TEST" for row in with_search)
+
+
+def test_list_sorts_by_new_keys(client: TestClient) -> None:
+    for key in ("change_1d", "change_5d", "signal", "rsi", "confidence", "risk"):
+        response = client.get(
+            f"/api/v1/opportunities/list?min_upside=-100&sort_by={key}&sort_order=desc"
+        )
+        assert response.status_code == 200, (key, response.text[:200])
+        assert response.json(), key

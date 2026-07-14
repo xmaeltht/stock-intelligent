@@ -89,6 +89,16 @@ export default function Dashboard() {
     [watched],
   );
 
+  const toggleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((order) => (order === "desc" ? "asc" : "desc"));
+    } else {
+      setSortBy(key);
+      setSortOrder(key === "name" || key === "ticker" ? "asc" : "desc");
+    }
+  };
+  const arrow = (key: string) => (sortBy === key ? (sortOrder === "desc" ? " ↓" : " ↑") : "");
+
   return (
     <>
       <TopNav online={summary ? true : error ? false : undefined} />
@@ -208,10 +218,16 @@ export default function Dashboard() {
             <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
               <option value="score">Opportunity score</option>
               <option value="upside">Upside</option>
-              <option value="name">Company name</option>
-              <option value="ticker">Ticker</option>
+              <option value="change_1d">1D change</option>
+              <option value="change_5d">5D change</option>
+              <option value="signal">Signal (bullish→bearish)</option>
+              <option value="rsi">RSI-14</option>
               <option value="price">Share price</option>
               <option value="volume">Daily volume</option>
+              <option value="confidence">Confidence grade</option>
+              <option value="risk">Risk level</option>
+              <option value="name">Company name</option>
+              <option value="ticker">Ticker</option>
             </select>
           </label>
           <label>
@@ -246,17 +262,18 @@ export default function Dashboard() {
             <thead>
               <tr>
                 <th style={{ width: 34 }} aria-label="Watch" />
-                <th>Company</th>
+                <th className={`sortable${sortBy === "ticker" ? " sorted" : ""}`} onClick={() => toggleSort("ticker")}>Company{arrow("ticker")}</th>
                 <th>Type</th>
-                <th className="r">Price</th>
-                <th className="r">1D</th>
+                <th className={`r sortable${sortBy === "price" ? " sorted" : ""}`} onClick={() => toggleSort("price")}>Price{arrow("price")}</th>
+                <th className={`r sortable${sortBy === "change_1d" ? " sorted" : ""}`} onClick={() => toggleSort("change_1d")}>1D{arrow("change_1d")}</th>
                 <th className="r">Fair value</th>
-                <th className="r">Upside</th>
-                <th className="r">Volume</th>
-                <th className="r">Score</th>
-                <th>Signal</th>
-                <th>Conf.</th>
-                <th>Risk</th>
+                <th className={`r sortable${sortBy === "upside" ? " sorted" : ""}`} onClick={() => toggleSort("upside")}>Upside{arrow("upside")}</th>
+                <th className={`r sortable${sortBy === "volume" ? " sorted" : ""}`} onClick={() => toggleSort("volume")}>Volume{arrow("volume")}</th>
+                <th className={`r sortable${sortBy === "score" ? " sorted" : ""}`} onClick={() => toggleSort("score")}>Score{arrow("score")}</th>
+                <th className={`sortable${sortBy === "signal" ? " sorted" : ""}`} onClick={() => toggleSort("signal")}>Signal{arrow("signal")}</th>
+                <th className={`sortable${sortBy === "rsi" ? " sorted" : ""}`} onClick={() => toggleSort("rsi")}>RSI{arrow("rsi")}</th>
+                <th className={`sortable${sortBy === "confidence" ? " sorted" : ""}`} onClick={() => toggleSort("confidence")}>Conf.{arrow("confidence")}</th>
+                <th className={`sortable${sortBy === "risk" ? " sorted" : ""}`} onClick={() => toggleSort("risk")}>Risk{arrow("risk")}</th>
                 <th>Primary evidence</th>
               </tr>
             </thead>
@@ -301,6 +318,7 @@ export default function Dashboard() {
                         {indicators.signal ?? "Pending"}
                       </span>
                     </td>
+                    <td className="num">{indicators.rsi14 ?? <span className="dim">—</span>}</td>
                     <td><b className="gradeBadge">{item.confidence_grade}</b></td>
                     <td className={item.risk_level === "High" ? "down" : item.risk_level === "Low" ? "up" : ""}>{item.risk_level}</td>
                     <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }}>

@@ -3,7 +3,7 @@ from collections import Counter
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.orm import Session, aliased, joinedload, load_only
 
 from app.core.config import get_settings
@@ -123,7 +123,20 @@ def opportunities(
     watched_only: bool = False,
     search: Annotated[str | None, Query(max_length=100)] = None,
     asset_type: Literal["all", "Stock", "ETF"] = "Stock",
-    sort_by: Literal["score", "upside", "name", "ticker", "price", "volume"] = "score",
+    sort_by: Literal[
+        "score",
+        "upside",
+        "name",
+        "ticker",
+        "price",
+        "volume",
+        "change_1d",
+        "change_5d",
+        "signal",
+        "rsi",
+        "confidence",
+        "risk",
+    ] = "score",
     sort_order: Literal["asc", "desc"] = "desc",
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -161,6 +174,26 @@ def opportunities(
         pattern = f"%{search.strip()}%"
         filters.append(Company.ticker.ilike(pattern) | Company.name.ilike(pattern))
 
+    indicators_json = StockAnalysis.technical_indicators
+    signal_rank = case(
+        (indicators_json["signal"].as_string() == "Bullish", 3),
+        (indicators_json["signal"].as_string() == "Neutral", 2),
+        (indicators_json["signal"].as_string() == "Bearish", 1),
+        else_=0,
+    )
+    confidence_rank = case(
+        (StockAnalysis.confidence_grade == "A", 4),
+        (StockAnalysis.confidence_grade == "B", 3),
+        (StockAnalysis.confidence_grade == "C", 2),
+        (StockAnalysis.confidence_grade == "D", 1),
+        else_=0,
+    )
+    risk_rank = case(
+        (StockAnalysis.risk_level == "Low", 3),
+        (StockAnalysis.risk_level == "Moderate", 2),
+        (StockAnalysis.risk_level == "High", 1),
+        else_=0,
+    )
     sort_columns = {
         "score": StockAnalysis.opportunity_score,
         "upside": StockAnalysis.upside_pct,
@@ -168,6 +201,12 @@ def opportunities(
         "ticker": Company.ticker,
         "price": StockAnalysis.current_price,
         "volume": StockAnalysis.volume,
+        "change_1d": indicators_json["change_1d_pct"].as_float(),
+        "change_5d": indicators_json["change_5d_pct"].as_float(),
+        "signal": signal_rank,
+        "rsi": indicators_json["rsi14"].as_float(),
+        "confidence": confidence_rank,
+        "risk": risk_rank,
     }
     sort_column = sort_columns[sort_by]
     ordering = sort_column.asc() if sort_order == "asc" else sort_column.desc()
