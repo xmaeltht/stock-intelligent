@@ -10,27 +10,17 @@ question competitors hide: do the ratings actually work?
 from bisect import bisect_right
 from statistics import fmean, median
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.analysis.rating import RATING_ORDER, derive_rating
 from app.core.config import get_settings
 from app.models.company import Company
 from app.models.stock_analysis import StockAnalysis
+from app.services.queries import eligible_conditions, latest_ids
 
 HORIZONS = ((21, "1M"), (63, "3M"), (126, "6M"))
 MAX_OBSERVATIONS = 250_000
-
-
-def _latest_ids():
-    prior = aliased(StockAnalysis)
-    latest_time = (
-        select(func.max(prior.as_of))
-        .where(prior.company_id == StockAnalysis.company_id)
-        .correlate(StockAnalysis)
-        .scalar_subquery()
-    )
-    return select(StockAnalysis.id).where(StockAnalysis.as_of == latest_time)
 
 
 def _num(value: object) -> float | None:
@@ -51,19 +41,14 @@ def _summarize(returns: list[float]) -> dict:
 
 def run_backtest(db: Session) -> dict:
     settings = get_settings()
-    eligible = (
-        Company.is_active.is_(True),
-        Company.is_research_eligible.is_(True),
-        or_(Company.cik.is_not(None), Company.asset_type == "ETF"),
-        Company.exchange.in_(settings.exchange_list),
-    )
+    eligible = eligible_conditions(settings)
 
     # One daily price timeline per company (the latest, most complete series).
     timelines: dict[str, tuple[list[str], list[float]]] = {}
     for company_id, history in db.execute(
         select(StockAnalysis.company_id, StockAnalysis.price_history)
         .join(Company, Company.id == StockAnalysis.company_id)
-        .where(StockAnalysis.id.in_(_latest_ids()), *eligible)
+        .where(StockAnalysis.id.in_(latest_ids()), *eligible)
     ):
         points = sorted(
             (str(p["date"]), float(p["close"]))

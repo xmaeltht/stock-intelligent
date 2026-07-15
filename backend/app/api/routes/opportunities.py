@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func, or_, select, update
-from sqlalchemy.orm import Session, aliased, joinedload, load_only
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.orm import Session, joinedload, load_only
 
 from app.analysis.valuation import IMPLAUSIBLE_UPSIDE_PCT
 from app.core.config import get_settings
@@ -27,85 +27,15 @@ from app.schemas.analysis import (
 )
 from app.services.backtest import run_backtest
 from app.services.discovery import build_radar
+from app.services.queries import (
+    FACTOR_KEYS,
+    eligible_conditions,
+    latest_ids,
+)
 from app.services.screen_parser import parse_screen_query
+from app.services.screener import list_analyses
 
 router = APIRouter()
-
-LIST_COLUMNS = (
-    StockAnalysis.company_id,
-    StockAnalysis.as_of,
-    StockAnalysis.price_as_of,
-    StockAnalysis.price_date,
-    StockAnalysis.current_price,
-    StockAnalysis.volume,
-    StockAnalysis.fair_value,
-    StockAnalysis.upside_pct,
-    StockAnalysis.opportunity_score,
-    StockAnalysis.confidence_grade,
-    StockAnalysis.risk_level,
-    StockAnalysis.qualification,
-    StockAnalysis.technical_indicators,
-    StockAnalysis.factor_scores,
-    StockAnalysis.catalysts,
-)
-
-
-def latest_ids():
-    prior = aliased(StockAnalysis)
-    latest_time = (
-        select(func.max(prior.as_of))
-        .where(prior.company_id == StockAnalysis.company_id)
-        .correlate(StockAnalysis)
-        .scalar_subquery()
-    )
-    return select(StockAnalysis.id).where(StockAnalysis.as_of == latest_time)
-
-
-def eligible_conditions(settings):
-    return (
-        Company.is_active.is_(True),
-        Company.is_research_eligible.is_(True),
-        or_(Company.cik.is_not(None), Company.asset_type == "ETF"),
-        Company.exchange.in_(settings.exchange_list),
-    )
-
-
-def _clamp_expr(expr, low: float, high: float):
-    """Portable clamp (SQLite has no scalar greatest/least)."""
-    return case((expr < low, low), (expr > high, high), else_=expr)
-
-
-def rating_expression():
-    """A numeric composite mirroring the frontend rules-based rating, so the whole
-    universe can be ranked Strong Buy → Sell in SQL. Higher is more bullish."""
-    indicators = StockAnalysis.technical_indicators
-    signal = indicators["signal"].as_string()
-    rsi = indicators["rsi14"].as_float()
-    cross = indicators["trend_cross"].as_string()
-    signal_term = case((signal == "Bullish", 2.0), (signal == "Bearish", -2.0), else_=0.0)
-    # Modeled upside only counts for stocks with a real fundamental fair value.
-    upside_term = case(
-        (
-            (Company.asset_type == "Stock")
-            & (StockAnalysis.qualification != "Technical Screen Only"),
-            _clamp_expr(StockAnalysis.upside_pct / 20.0, -3.0, 4.0),
-        ),
-        else_=0.0,
-    )
-    cross_term = case((cross == "Golden cross", 1.0), (cross == "Death cross", -1.0), else_=0.0)
-    rsi_term = case(
-        (rsi >= 78, -1.0),
-        (rsi <= 30, 1.0),
-        ((rsi >= 45) & (rsi <= 68), 0.5),
-        else_=0.0,
-    )
-    risk_term = case(
-        (StockAnalysis.risk_level == "Low", 0.5),
-        (StockAnalysis.risk_level == "High", -0.5),
-        else_=0.0,
-    )
-    score_term = _clamp_expr((StockAnalysis.opportunity_score - 50) / 25.0, -2.0, 2.0)
-    return signal_term + upside_term + cross_term + rsi_term + risk_term + score_term
 
 
 def build_summary(db: Session) -> DashboardSummary:
@@ -237,115 +167,31 @@ def opportunities(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[StockAnalysis]:
-    # A ticker/company search should always surface the match, regardless of the
-    # upside threshold or the Stocks/ETFs toggle — otherwise a searched symbol
-    # (e.g. a leveraged ETF while "Stocks" is selected) silently returns nothing.
-    effective_min_upside = -100.0 if search else min_upside
-    filters = [
-        StockAnalysis.id.in_(latest_ids()),
-        Company.is_research_eligible.is_(True),
-        StockAnalysis.upside_pct >= effective_min_upside,
-    ]
-    # Hide implausible (data-error) valuations from ranked browsing, but never
-    # when the user is searching for a specific ticker.
-    if not search:
-        filters.append(StockAnalysis.upside_pct <= IMPLAUSIBLE_UPSIDE_PCT)
-    if asset_type != "all" and not search:
-        filters.append(Company.asset_type == asset_type)
-    if sector and not search:
-        filters.append(Company.sector == sector)
-    if min_price is not None:
-        filters.append(StockAnalysis.current_price >= min_price)
-    if max_price is not None:
-        filters.append(StockAnalysis.current_price <= max_price)
-    if min_volume is not None:
-        filters.append(StockAnalysis.volume >= min_volume)
-    if min_score is not None:
-        filters.append(StockAnalysis.opportunity_score >= min_score)
-    if signal != "all":
-        filters.append(
-            StockAnalysis.technical_indicators["signal"].as_string() == signal
-        )
-    if golden_cross:
-        filters.append(
-            StockAnalysis.technical_indicators["trend_cross"].as_string() == "Golden cross"
-        )
-    if min_rsi is not None:
-        filters.append(StockAnalysis.technical_indicators["rsi14"].as_float() >= min_rsi)
-    if max_rsi is not None:
-        filters.append(StockAnalysis.technical_indicators["rsi14"].as_float() <= max_rsi)
-    for key, threshold in (
-        ("value", min_value),
-        ("quality", min_quality),
-        ("momentum", min_momentum),
-        ("growth", min_growth),
-        ("income", min_income),
-    ):
-        if threshold is not None:
-            filters.append(StockAnalysis.factor_scores[key].as_float() >= threshold)
-    if watched_only:
-        from app.models.watchlist import WatchlistEntry
-
-        filters.append(
-            StockAnalysis.company_id.in_(select(WatchlistEntry.company_id))
-        )
-    if search:
-        pattern = f"%{search.strip()}%"
-        filters.append(Company.ticker.ilike(pattern) | Company.name.ilike(pattern))
-
-    indicators_json = StockAnalysis.technical_indicators
-    signal_rank = case(
-        (indicators_json["signal"].as_string() == "Bullish", 3),
-        (indicators_json["signal"].as_string() == "Neutral", 2),
-        (indicators_json["signal"].as_string() == "Bearish", 1),
-        else_=0,
+    return list_analyses(
+        db,
+        min_upside=min_upside,
+        min_price=min_price,
+        max_price=max_price,
+        min_volume=min_volume,
+        min_score=min_score,
+        signal=signal,
+        golden_cross=golden_cross,
+        min_rsi=min_rsi,
+        max_rsi=max_rsi,
+        min_value=min_value,
+        min_quality=min_quality,
+        min_momentum=min_momentum,
+        min_growth=min_growth,
+        min_income=min_income,
+        watched_only=watched_only,
+        search=search,
+        sector=sector,
+        asset_type=asset_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
     )
-    confidence_rank = case(
-        (StockAnalysis.confidence_grade == "A", 4),
-        (StockAnalysis.confidence_grade == "B", 3),
-        (StockAnalysis.confidence_grade == "C", 2),
-        (StockAnalysis.confidence_grade == "D", 1),
-        else_=0,
-    )
-    risk_rank = case(
-        (StockAnalysis.risk_level == "Low", 3),
-        (StockAnalysis.risk_level == "Moderate", 2),
-        (StockAnalysis.risk_level == "High", 1),
-        else_=0,
-    )
-    sort_columns = {
-        "rating": rating_expression(),
-        "score": StockAnalysis.opportunity_score,
-        "upside": StockAnalysis.upside_pct,
-        "name": Company.name,
-        "ticker": Company.ticker,
-        "price": StockAnalysis.current_price,
-        "volume": StockAnalysis.volume,
-        "change_1d": indicators_json["change_1d_pct"].as_float(),
-        "change_5d": indicators_json["change_5d_pct"].as_float(),
-        "signal": signal_rank,
-        "rsi": indicators_json["rsi14"].as_float(),
-        "confidence": confidence_rank,
-        "risk": risk_rank,
-        "factor_composite": StockAnalysis.factor_scores["composite"].as_float(),
-        "factor_value": StockAnalysis.factor_scores["value"].as_float(),
-        "factor_quality": StockAnalysis.factor_scores["quality"].as_float(),
-        "factor_momentum": StockAnalysis.factor_scores["momentum"].as_float(),
-        "factor_growth": StockAnalysis.factor_scores["growth"].as_float(),
-        "factor_income": StockAnalysis.factor_scores["income"].as_float(),
-    }
-    sort_column = sort_columns[sort_by]
-    ordering = sort_column.asc() if sort_order == "asc" else sort_column.desc()
-    statement = (
-        select(StockAnalysis)
-        .join(Company)
-        .options(load_only(*LIST_COLUMNS), joinedload(StockAnalysis.company))
-        .where(*filters)
-        .order_by(ordering.nulls_last(), StockAnalysis.opportunity_score.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    return list(db.scalars(statement))
 
 
 @router.get("/screen", response_model=ScreenResponse)
@@ -358,7 +204,7 @@ def natural_screen(
     filters (deterministically, no model) and return the matching securities plus
     a transparent list of how the request was interpreted."""
     parsed, interpretation = parse_screen_query(q)
-    results = opportunities(db=db, limit=limit, **parsed)
+    results = list_analyses(db, limit=limit, **parsed)
     return ScreenResponse(
         query=q,
         interpretation=interpretation,
@@ -745,8 +591,6 @@ def stock_detail(ticker: str, db: Annotated[Session, Depends(get_db)]) -> StockA
         raise HTTPException(status_code=404, detail="No analysis exists for this ticker")
     return analysis
 
-
-FACTOR_KEYS = ("value", "quality", "momentum", "growth", "income", "composite")
 
 
 @router.get("/stocks/{ticker}/factors")

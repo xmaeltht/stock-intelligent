@@ -5,12 +5,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, load_only
 
-from app.api.routes.opportunities import LIST_COLUMNS, latest_ids
 from app.db.session import get_db
 from app.models.company import Company
 from app.models.stock_analysis import StockAnalysis
 from app.models.watchlist import WatchlistEntry
 from app.schemas.analysis import AnalysisListItem, WatchlistItem
+from app.services.queries import latest_ids
+from app.services.screener import LIST_COLUMNS
 
 router = APIRouter()
 
