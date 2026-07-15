@@ -349,3 +349,28 @@ export type BacktestResponse = {
   benchmark: Record<string, BacktestBucket>;
   ratings: BacktestRating[];
 };
+
+export type RadarEvent = {
+  ticker: string;
+  name: string;
+  sector: string;
+  asset_type: string;
+  price: number;
+  change_1d_pct: number | null;
+  as_of: string | null;
+  headline: string;
+  significance: number;
+};
+export type RadarCategory = {
+  key: string;
+  label: string;
+  description: string;
+  count: number;
+  items: RadarEvent[];
+};
+export type RadarResponse = {
+  generated_at: string | null;
+  universe: number;
+  total_events: number;
+  categories: RadarCategory[];
+};

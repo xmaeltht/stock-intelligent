@@ -578,3 +578,33 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .btBar--up { background: linear-gradient(90deg, rgba(56,224,160,.4), var(--bull-bright, #38e0a0)); }
 .btBar--down { background: linear-gradient(270deg, rgba(255,122,122,.4), var(--bear-bright, #ff7a7a)); }
 .btBenchmark td { border-top: 1px solid var(--glass-border-2, rgba(255,255,255,.14)); background: rgba(255,255,255,.02); }
+
+/* ── live discovery radar ── */
+.radarSection { margin: 22px 0; }
+.radarSectionHead { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.radarSectionHead h2 { font-size: 16px; margin: 0; letter-spacing: -.01em; }
+.radarSectionHead h2 em { font-style: normal; color: var(--faint); font-size: 13px; font-weight: 600; }
+.radarSectionHead span { color: var(--faint); font: 500 12px var(--sans); }
+.radarGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.radarCard { display: flex; flex-direction: column; gap: 9px; padding: 13px 15px; border-radius: 13px;
+  border: 1px solid var(--glass-border); background: var(--glass); text-decoration: none; color: inherit;
+  transition: border-color .15s, transform .15s, background .15s; }
+.radarCard:hover { border-color: var(--glass-border-2); transform: translateY(-2px); background: var(--glass-2); }
+.radarCardTop { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.radarCardTop strong { display: block; font: 800 15px var(--mono); letter-spacing: -.01em; }
+.radarCardTop span { display: block; font-size: 11.5px; color: var(--muted); max-width: 150px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.radarPrice { text-align: right; white-space: nowrap; }
+.radarPrice b { display: block; font-size: 13px; }
+.radarPrice span { font: 600 11.5px var(--mono); }
+.radarCardBot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.radarHeadline { font: 700 11.5px var(--sans); padding: 3px 9px; border-radius: 7px; white-space: nowrap;
+  border: 1px solid transparent; }
+.radarHeadline--up { color: var(--bull-bright, #38e0a0); background: rgba(56,224,160,.1); border-color: rgba(56,224,160,.28); }
+.radarHeadline--down { color: var(--bear-bright, #ff7a7a); background: rgba(255,122,122,.1); border-color: rgba(255,122,122,.28); }
+.radarHeadline--accent { color: var(--price, #5aa2ff); background: rgba(90,162,255,.1); border-color: rgba(90,162,255,.28); }
+.radarHeadline--warn { color: #f4c15d; background: rgba(244,193,93,.1); border-color: rgba(244,193,93,.28); }
+.toggleChip b { color: var(--text); margin-left: 3px; font-variant-numeric: tabular-nums; }
+.radarMore { margin-top: 10px; background: none; border: 0; color: var(--price, #5aa2ff); cursor: pointer;
+  font: 600 12px var(--sans); padding: 4px 0; }
+.radarMore:hover { text-decoration: underline; }

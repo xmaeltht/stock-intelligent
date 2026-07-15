@@ -25,6 +25,7 @@ from app.schemas.analysis import (
     MoverItem,
 )
 from app.services.backtest import run_backtest
+from app.services.discovery import build_radar
 
 router = APIRouter()
 
@@ -179,6 +180,13 @@ def rating_backtest(db: Annotated[Session, Depends(get_db)]) -> dict:
     analyzer's own stored snapshot history. Research diagnostics — a measure of
     the rules' historical behavior, not a promise of future returns."""
     return run_backtest(db)
+
+
+@router.get("/radar")
+def discovery_radar(db: Annotated[Session, Depends(get_db)]) -> dict:
+    """Live market-wide radar: notable events (crosses, breakouts, unusual volume,
+    movers, value setups) detected across every analyzed security right now."""
+    return build_radar(db)
 
 
 @router.get("/list", response_model=list[AnalysisListItem])

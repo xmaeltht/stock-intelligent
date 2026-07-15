@@ -242,6 +242,15 @@ def test_list_includes_factor_scores(client: TestClient) -> None:
     assert "composite" in rows[0]["factor_scores"]
 
 
+def test_radar_endpoint(client: TestClient) -> None:
+    response = client.get("/api/v1/opportunities/radar")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "categories" in payload and "total_events" in payload
+    keys = {cat["key"] for cat in payload["categories"]}
+    assert {"golden_cross", "unusual_volume", "gainers", "value", "momentum"} <= keys
+
+
 def test_backtest_endpoint(client: TestClient) -> None:
     response = client.get("/api/v1/opportunities/backtest")
     assert response.status_code == 200
