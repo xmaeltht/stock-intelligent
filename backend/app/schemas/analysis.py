@@ -158,3 +158,11 @@ class IdeaItem(BaseModel):
 class IdeasResponse(BaseModel):
     swing: list[IdeaItem]
     long_term: list[IdeaItem]
+
+
+class ScreenResponse(BaseModel):
+    query: str
+    interpretation: list[dict[str, object]]
+    filters: dict[str, object]
+    count: int
+    results: list[AnalysisListItem]

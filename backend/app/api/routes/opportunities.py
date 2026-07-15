@@ -23,9 +23,11 @@ from app.schemas.analysis import (
     IdeasResponse,
     MarketOverview,
     MoverItem,
+    ScreenResponse,
 )
 from app.services.backtest import run_backtest
 from app.services.discovery import build_radar
+from app.services.screen_parser import parse_screen_query
 
 router = APIRouter()
 
@@ -198,6 +200,14 @@ def opportunities(
     min_volume: Annotated[int | None, Query(ge=0)] = None,
     min_score: Annotated[int | None, Query(ge=0, le=100)] = None,
     signal: Literal["all", "Bullish", "Neutral", "Bearish"] = "all",
+    golden_cross: bool = False,
+    min_rsi: Annotated[float | None, Query(ge=0, le=100)] = None,
+    max_rsi: Annotated[float | None, Query(ge=0, le=100)] = None,
+    min_value: Annotated[int | None, Query(ge=0, le=100)] = None,
+    min_quality: Annotated[int | None, Query(ge=0, le=100)] = None,
+    min_momentum: Annotated[int | None, Query(ge=0, le=100)] = None,
+    min_growth: Annotated[int | None, Query(ge=0, le=100)] = None,
+    min_income: Annotated[int | None, Query(ge=0, le=100)] = None,
     watched_only: bool = False,
     search: Annotated[str | None, Query(max_length=100)] = None,
     sector: Annotated[str | None, Query(max_length=64)] = None,
@@ -256,6 +266,23 @@ def opportunities(
         filters.append(
             StockAnalysis.technical_indicators["signal"].as_string() == signal
         )
+    if golden_cross:
+        filters.append(
+            StockAnalysis.technical_indicators["trend_cross"].as_string() == "Golden cross"
+        )
+    if min_rsi is not None:
+        filters.append(StockAnalysis.technical_indicators["rsi14"].as_float() >= min_rsi)
+    if max_rsi is not None:
+        filters.append(StockAnalysis.technical_indicators["rsi14"].as_float() <= max_rsi)
+    for key, threshold in (
+        ("value", min_value),
+        ("quality", min_quality),
+        ("momentum", min_momentum),
+        ("growth", min_growth),
+        ("income", min_income),
+    ):
+        if threshold is not None:
+            filters.append(StockAnalysis.factor_scores[key].as_float() >= threshold)
     if watched_only:
         from app.models.watchlist import WatchlistEntry
 
@@ -319,6 +346,26 @@ def opportunities(
         .offset(offset)
     )
     return list(db.scalars(statement))
+
+
+@router.get("/screen", response_model=ScreenResponse)
+def natural_screen(
+    db: Annotated[Session, Depends(get_db)],
+    q: Annotated[str, Query(min_length=1, max_length=200)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 60,
+) -> ScreenResponse:
+    """Plain-English screener: parse a natural-language request into structured
+    filters (deterministically, no model) and return the matching securities plus
+    a transparent list of how the request was interpreted."""
+    parsed, interpretation = parse_screen_query(q)
+    results = opportunities(db=db, limit=limit, **parsed)
+    return ScreenResponse(
+        query=q,
+        interpretation=interpretation,
+        filters=parsed,
+        count=len(results),
+        results=results,
+    )
 
 
 @router.get("/sectors")

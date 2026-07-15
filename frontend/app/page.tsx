@@ -15,6 +15,7 @@ import {
   timeAgo,
   toggleWatch,
   type ListItem,
+  type ScreenResponse,
   type SectorsResponse,
   type Summary,
 } from "../lib/api";
@@ -48,6 +49,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [flash, setFlash] = useState<Record<string, "up" | "down">>({});
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [ask, setAsk] = useState("");
+  const [screen, setScreen] = useState<ScreenResponse | null>(null);
+  const [asking, setAsking] = useState(false);
   const [live, setLive] = useState(true);
   // Once the URL filters have been read back into state (so we can restore the
   // exact view on browser-back instead of resetting to the default screener).
@@ -176,6 +180,22 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
+  const runAsk = useCallback(async () => {
+    const query = ask.trim();
+    if (!query) return;
+    setAsking(true);
+    try {
+      const result = await getJson<ScreenResponse>(
+        `/api/research/opportunities/screen?q=${encodeURIComponent(query)}&limit=100`,
+      );
+      setScreen(result);
+    } catch {
+      setScreen({ query, interpretation: [], filters: {}, count: 0, results: [] });
+    } finally {
+      setAsking(false);
+    }
+  }, [ask]);
+
   const onToggleWatch = useCallback(
     async (ticker: string) => {
       const isWatched = watched.has(ticker);
@@ -224,7 +244,46 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {summary && (
+        <form
+          className="askBar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            runAsk();
+          }}
+        >
+          <span className="askIcon">✦</span>
+          <input
+            value={ask}
+            onChange={(event) => setAsk(event.target.value)}
+            placeholder="Describe what you're looking for — e.g. profitable semiconductor stocks under $20 with a golden cross"
+          />
+          {screen && (
+            <button type="button" className="askClear" onClick={() => { setScreen(null); setAsk(""); }}>
+              ✕ Clear
+            </button>
+          )}
+          <button type="submit" className="askGo" disabled={asking || !ask.trim()}>
+            {asking ? "…" : "Screen"}
+          </button>
+        </form>
+
+        {screen && (
+          <div className="askResult">
+            <div className="askInterp">
+              <span className="askInterpLabel">Interpreted as</span>
+              {screen.interpretation.length ? (
+                screen.interpretation.map((item, index) => (
+                  <span key={index} className="askChip">{item.label}</span>
+                ))
+              ) : (
+                <span className="dim">no filters recognized</span>
+              )}
+              <span className="askCount">{screen.count} match{screen.count === 1 ? "" : "es"}</span>
+            </div>
+          </div>
+        )}
+
+        {summary && !screen && (
           <div className="liveStrip">
             <span className={`livePulse${summary.market_session !== "closed" ? " open" : ""}`}>
               <i />
@@ -290,7 +349,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="filterBar">
+        <div className="filterBar" style={{ display: screen ? "none" : undefined }}>
           <label>
             Asset type
             <select value={assetType} onChange={(event) => setAssetType(event.target.value)}>
@@ -395,20 +454,25 @@ export default function Dashboard() {
           </button>
         </div>
 
-        <div className="resultBar">
-          <span className="resultCount">
-            {loading ? "Loading…" : `${analyses.length}${analyses.length >= 250 ? "+" : ""} securities`}
-            {analyses.length >= 250 && <em> · showing top 250 — narrow filters or search to refine</em>}
-          </span>
-          <span className="resultHint">
-            {assetType === "ETF"
-              ? "ETFs ranked on trend & liquidity — no fabricated fair value."
-              : "Technical confirmation supports timing, not the fair-value calc."}
-          </span>
-        </div>
+        {!screen && (
+          <div className="resultBar">
+            <span className="resultCount">
+              {loading ? "Loading…" : `${analyses.length}${analyses.length >= 250 ? "+" : ""} securities`}
+              {analyses.length >= 250 && <em> · showing top 250 — narrow filters or search to refine</em>}
+            </span>
+            <span className="resultHint">
+              {assetType === "ETF"
+                ? "ETFs ranked on trend & liquidity — no fabricated fair value."
+                : "Technical confirmation supports timing, not the fair-value calc."}
+            </span>
+          </div>
+        )}
 
-        {error && <div className="notice notice--error">{error}</div>}
-        {!error && !loading && analyses.length === 0 && (
+        {error && !screen && <div className="notice notice--error">{error}</div>}
+        {screen && screen.results.length === 0 && (
+          <div className="notice">No securities match that description. Try relaxing a constraint.</div>
+        )}
+        {!screen && !error && !loading && analyses.length === 0 && (
           <div className="notice">
             {watchedOnly
               ? "No watchlisted securities match the current filters."
@@ -439,7 +503,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {analyses.map((item) => {
+              {(screen ? screen.results : analyses).map((item) => {
                 const technicalOnly =
                   item.company.asset_type === "ETF" || item.qualification === "Technical Screen Only";
                 const indicators = item.technical_indicators ?? {};

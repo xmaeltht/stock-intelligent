@@ -242,6 +242,16 @@ def test_list_includes_factor_scores(client: TestClient) -> None:
     assert "composite" in rows[0]["factor_scores"]
 
 
+def test_screen_endpoint(client: TestClient) -> None:
+    response = client.get("/api/v1/opportunities/screen?q=technology stocks under $50")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["filters"]["sector"] == "Technology"
+    assert payload["filters"]["max_price"] == 50
+    assert "results" in payload and "interpretation" in payload
+    assert isinstance(payload["count"], int)
+
+
 def test_radar_endpoint(client: TestClient) -> None:
     response = client.get("/api/v1/opportunities/radar")
     assert response.status_code == 200

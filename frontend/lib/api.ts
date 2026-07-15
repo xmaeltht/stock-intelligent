@@ -374,3 +374,11 @@ export type RadarResponse = {
   total_events: number;
   categories: RadarCategory[];
 };
+
+export type ScreenResponse = {
+  query: string;
+  interpretation: Array<{ label: string }>;
+  filters: Record<string, unknown>;
+  count: number;
+  results: ListItem[];
+};
