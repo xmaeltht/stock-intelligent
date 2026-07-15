@@ -382,3 +382,15 @@ export type ScreenResponse = {
   count: number;
   results: ListItem[];
 };
+
+export type SectorFactorRow = {
+  sector: string;
+  count: number;
+  value: number | null;
+  quality: number | null;
+  momentum: number | null;
+  growth: number | null;
+  income: number | null;
+  composite: number | null;
+};
+export type SectorFactorMatrix = { factors: string[]; sectors: SectorFactorRow[] };

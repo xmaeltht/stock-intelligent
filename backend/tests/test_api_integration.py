@@ -252,6 +252,14 @@ def test_screen_endpoint(client: TestClient) -> None:
     assert isinstance(payload["count"], int)
 
 
+def test_sector_factors_endpoint(client: TestClient) -> None:
+    response = client.get("/api/v1/opportunities/sector-factors")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "sectors" in payload
+    assert payload["factors"] == ["value", "quality", "momentum", "growth", "income", "composite"]
+
+
 def test_radar_endpoint(client: TestClient) -> None:
     response = client.get("/api/v1/opportunities/radar")
     assert response.status_code == 200

@@ -631,3 +631,15 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .askChip { padding: 4px 11px; border-radius: 999px; font: 600 12px var(--sans); color: var(--price, #5aa2ff);
   background: rgba(90,162,255,.1); border: 1px solid rgba(90,162,255,.3); }
 .askCount { margin-left: auto; color: var(--muted); font: 700 13px var(--mono); }
+
+/* ── sector factor heatmap ── */
+.heatWrap { overflow-x: auto; }
+.heatTable { width: 100%; border-collapse: separate; border-spacing: 3px; }
+.heatTable th { font: 600 10.5px var(--sans); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--faint); padding: 4px 8px; text-align: right; }
+.heatTable th.heatSector { text-align: left; }
+.heatSector { font: 600 12.5px var(--sans); color: var(--text); white-space: nowrap; padding: 6px 10px; text-align: left; }
+.heatCell { text-align: center; font: 700 13px var(--mono); padding: 9px 6px; border-radius: 7px; min-width: 58px;
+  transition: transform .1s; }
+.heatCell:hover { transform: scale(1.05); }
+.heatCount { font: 600 11px var(--mono); color: var(--faint); text-align: right; padding: 6px 8px; }

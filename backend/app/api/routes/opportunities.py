@@ -27,6 +27,7 @@ from app.schemas.analysis import (
 )
 from app.services.backtest import run_backtest
 from app.services.discovery import build_radar
+from app.services.market import sector_factor_matrix
 from app.services.queries import (
     FACTOR_KEYS,
     eligible_conditions,
@@ -119,6 +120,12 @@ def discovery_radar(db: Annotated[Session, Depends(get_db)]) -> dict:
     """Live market-wide radar: notable events (crosses, breakouts, unusual volume,
     movers, value setups) detected across every analyzed security right now."""
     return build_radar(db)
+
+
+@router.get("/sector-factors")
+def sector_factors(db: Annotated[Session, Depends(get_db)]) -> dict:
+    """Average factor scores by sector — the market-structure heatmap."""
+    return sector_factor_matrix(db)
 
 
 @router.get("/list", response_model=list[AnalysisListItem])

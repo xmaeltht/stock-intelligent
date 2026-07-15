@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import TopNav from "../../components/TopNav";
+import SectorHeatmap from "../../components/SectorHeatmap";
 import { getJson, money, pct, signalClass, type Mover, type Overview } from "../../lib/api";
 
 type FailureGroup = {
@@ -172,6 +173,10 @@ export default function MarketPage() {
                     : "—"}
                 </strong>
               </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <SectorHeatmap />
             </div>
 
             <div className="panelGrid grid2" style={{ marginBottom: 14 }}>
