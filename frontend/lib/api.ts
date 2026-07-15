@@ -333,3 +333,19 @@ export type IdeaItem = {
 };
 
 export type IdeasResponse = { swing: IdeaItem[]; long_term: IdeaItem[] };
+
+export type BacktestBucket = {
+  n: number;
+  avg_return_pct: number | null;
+  median_return_pct: number | null;
+  hit_rate_pct: number | null;
+};
+export type BacktestRating = { rating: string; by_horizon: Record<string, BacktestBucket> };
+export type BacktestResponse = {
+  sample_size: number;
+  since: string | null;
+  universe: number;
+  horizons: Array<{ days: number; label: string }>;
+  benchmark: Record<string, BacktestBucket>;
+  ratings: BacktestRating[];
+};

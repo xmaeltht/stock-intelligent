@@ -24,6 +24,7 @@ from app.schemas.analysis import (
     MarketOverview,
     MoverItem,
 )
+from app.services.backtest import run_backtest
 
 router = APIRouter()
 
@@ -170,6 +171,14 @@ def build_summary(db: Session) -> DashboardSummary:
 @router.get("/summary", response_model=DashboardSummary)
 def summary(db: Annotated[Session, Depends(get_db)]) -> DashboardSummary:
     return build_summary(db)
+
+
+@router.get("/backtest")
+def rating_backtest(db: Annotated[Session, Depends(get_db)]) -> dict:
+    """Forward-return performance of each rating bucket, recomputed from the
+    analyzer's own stored snapshot history. Research diagnostics — a measure of
+    the rules' historical behavior, not a promise of future returns."""
+    return run_backtest(db)
 
 
 @router.get("/list", response_model=list[AnalysisListItem])

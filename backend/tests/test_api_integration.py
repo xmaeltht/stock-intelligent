@@ -242,6 +242,15 @@ def test_list_includes_factor_scores(client: TestClient) -> None:
     assert "composite" in rows[0]["factor_scores"]
 
 
+def test_backtest_endpoint(client: TestClient) -> None:
+    response = client.get("/api/v1/opportunities/backtest")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "ratings" in payload and "benchmark" in payload
+    assert {"rating", "by_horizon"} <= set(payload["ratings"][0])
+    assert [h["label"] for h in payload["horizons"]] == ["1M", "3M", "6M"]
+
+
 def test_ideas_endpoint_returns_two_lists(client: TestClient) -> None:
     response = client.get("/api/v1/opportunities/ideas")
     assert response.status_code == 200

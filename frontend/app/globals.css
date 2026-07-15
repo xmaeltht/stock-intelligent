@@ -570,3 +570,11 @@ html, body { max-width: 100%; overflow-x: hidden; }
     background: rgba(18, 24, 40, 0.92);
   }
 }
+
+/* ── rating backtest ── */
+.btBarTrack { position: relative; height: 20px; width: 100%; min-width: 180px; }
+.btBarZero { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--glass-border-2, rgba(255,255,255,.14)); }
+.btBar { position: absolute; top: 4px; height: 12px; border-radius: 4px; }
+.btBar--up { background: linear-gradient(90deg, rgba(56,224,160,.4), var(--bull-bright, #38e0a0)); }
+.btBar--down { background: linear-gradient(270deg, rgba(255,122,122,.4), var(--bear-bright, #ff7a7a)); }
+.btBenchmark td { border-top: 1px solid var(--glass-border-2, rgba(255,255,255,.14)); background: rgba(255,255,255,.02); }
