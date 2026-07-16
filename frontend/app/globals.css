@@ -678,3 +678,46 @@ html, body { max-width: 100%; overflow-x: hidden; }
   transition: transform .1s; }
 .heatCell:hover { transform: scale(1.05); }
 .heatCount { font: 600 11px var(--mono); color: var(--faint); text-align: right; padding: 6px 8px; }
+
+/* ── paper portfolio / decision system ── */
+input[type="number"], textarea {
+  width: 100%; min-height: 38px; padding: 8px 13px; border-radius: var(--radius-sm);
+  color: var(--text); font: 500 13px var(--sans); outline: none; background: var(--glass);
+  border: 1px solid var(--glass-border); box-shadow: inset 0 1px 0 var(--hi);
+}
+textarea { min-height: 70px; resize: vertical; line-height: 1.45; }
+input[type="number"]:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px #5aa2ff33; }
+.btn--primary { color: #06111a; border-color: #73ebc0; background: linear-gradient(135deg, #74b6ff, #4be0ae); font-weight: 800; }
+.btn--small { min-height: 30px; padding: 0 10px; font-size: 11px; }
+.portfolioStats .stat strong { font-size: clamp(20px, 2vw, 27px); }
+.stat--danger { border-color: #ff6b7d55; background: linear-gradient(180deg, rgba(255,107,125,.16), rgba(255,107,125,.04)); }
+.stat--danger strong { color: var(--bear-bright); }
+.portfolioGrid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, .85fr); gap: 16px; align-items: start; }
+.tradeTicket, .riskPanel { padding: 22px; }
+.tradeTicket > label, .formGrid label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;
+  color: var(--muted); font: 600 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.tradeSide { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.sideBtn { min-height: 38px; border-radius: 11px; border: 1px solid var(--glass-border); background: var(--glass); color: var(--muted); font: 800 12px var(--mono); cursor: pointer; }
+.sideBtn.buy.on { color: var(--bull-bright); border-color: #38e0a066; background: #38e0a01c; }
+.sideBtn.sell.on { color: var(--bear-bright); border-color: #ff6b7d66; background: #ff6b7d1c; }
+.ticketActions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; flex-wrap: wrap; }
+.riskPanel { position: sticky; top: 84px; }
+.riskExplainer { line-height: 1.6; margin: 18px 0 0; }
+.planResult { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--glass-border); }
+.planResult > strong { display: block; margin: 7px 0 16px; font: 800 26px var(--mono); color: var(--bull-bright); }
+.riskWarning { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; color: var(--gold); background: rgba(240,192,90,.1); font-size: 12px; }
+.portfolioSection { margin-top: 28px; }
+.tradeBadge { display: inline-flex; padding: 4px 8px; border-radius: 7px; font: 800 10px var(--mono); }
+.tradeBadge.buy { color: var(--bull-bright); background: rgba(56,224,160,.14); }
+.tradeBadge.sell { color: var(--bear-bright); background: rgba(255,107,125,.14); }
+.journalCell { min-width: 280px; max-width: 520px; white-space: normal; }
+.journalCell span { display: block; color: var(--muted); line-height: 1.45; margin: 2px 0; }
+.journalCell b { color: var(--text); }
+@media (max-width: 980px) {
+  .portfolioGrid { grid-template-columns: 1fr; }
+  .riskPanel { position: static; }
+}
+@media (max-width: 620px) {
+  .formGrid { grid-template-columns: 1fr; }
+}

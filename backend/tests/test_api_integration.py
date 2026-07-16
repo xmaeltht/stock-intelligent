@@ -134,6 +134,7 @@ def test_research_endpoints_respond(client: TestClient) -> None:
         "/api/v1/opportunities/compare?tickers=TEST,FAKE",
         "/api/v1/watchlist",
         "/api/v1/watchlist/tickers",
+        "/api/v1/paper",
     ):
         response = client.get(path)
         assert response.status_code == 200, (path, response.text[:300])
@@ -166,6 +167,54 @@ def test_watchlist_round_trip(client: TestClient) -> None:
 
 def test_unknown_watchlist_ticker_is_rejected(client: TestClient) -> None:
     assert client.post("/api/v1/watchlist/NOPE").status_code == 404
+
+
+def test_paper_portfolio_plan_and_trade_journal(client: TestClient) -> None:
+    initial = client.get("/api/v1/paper").json()
+    assert initial["total_value"] == "100000.00"
+    plan = client.post(
+        "/api/v1/paper/plan",
+        json={
+            "ticker": "TEST",
+            "entry_price": 15.95,
+            "invalidation_price": 14,
+            "target_price": 22,
+        },
+    )
+    assert plan.status_code == 200, plan.text
+    assert float(plan.json()["suggested_shares"]) > 0
+    bought = client.post(
+        "/api/v1/paper/trades",
+        json={
+            "ticker": "TEST",
+            "side": "BUY",
+            "quantity": 10,
+            "price": 15,
+            "invalidation_price": 14,
+            "target_price": 22,
+            "thesis": "Test thesis",
+        },
+    )
+    assert bought.status_code == 201, bought.text
+    payload = bought.json()
+    assert payload["positions"][0]["ticker"] == "TEST"
+    assert payload["positions"][0]["quantity"] == "10.000000"
+    sold = client.post(
+        "/api/v1/paper/trades",
+        json={"ticker": "TEST", "side": "SELL", "quantity": 4, "price": 20},
+    )
+    assert sold.status_code == 201, sold.text
+    result = sold.json()
+    assert result["positions"][0]["quantity"] == "6.000000"
+    assert result["trades"][0]["realized_pnl"] == "20.00"
+
+
+def test_paper_portfolio_rejects_overselling(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/paper/trades",
+        json={"ticker": "TEST", "side": "SELL", "quantity": 1, "price": 15},
+    )
+    assert response.status_code == 409
 
 
 def test_failure_summary_groups_errors(client: TestClient) -> None:

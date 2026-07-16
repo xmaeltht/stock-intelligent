@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/backtest", label: "Backtest" },
   { href: "/market", label: "Market" },
   { href: "/watchlist", label: "Watchlist" },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/compare", label: "Compare" },
 ];
 

@@ -306,6 +306,19 @@ export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> 
   return response.json() as Promise<T>;
 }
 
+export async function sendJson<T>(url: string, method: "POST" | "PUT", payload: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: `Request failed: ${response.status}` }));
+    throw new Error(error.detail ?? `Request failed: ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
 export async function fetchWatchlistTickers(): Promise<Set<string>> {
   const tickers = await getJson<string[]>("/api/research/watchlist/tickers");
   return new Set(tickers);
@@ -394,3 +407,68 @@ export type SectorFactorRow = {
   composite: number | null;
 };
 export type SectorFactorMatrix = { factors: string[]; sectors: SectorFactorRow[] };
+
+export type PaperPosition = {
+  ticker: string;
+  name: string;
+  quantity: string;
+  average_cost: string;
+  current_price: string;
+  market_value: string;
+  cost_basis: string;
+  unrealized_pnl: string;
+  unrealized_pct: number;
+  allocation_pct: number;
+  target_price: string | null;
+  invalidation_price: string | null;
+};
+
+export type PaperTrade = {
+  id: string;
+  ticker: string;
+  name: string;
+  side: "BUY" | "SELL";
+  quantity: string;
+  price: string;
+  fees: string;
+  realized_pnl: string | null;
+  thesis: string | null;
+  catalyst: string | null;
+  invalidation_price: string | null;
+  target_price: string | null;
+  notes: string | null;
+  executed_at: string;
+};
+
+export type PaperPortfolio = {
+  id: string;
+  name: string;
+  starting_cash: string;
+  cash_balance: string;
+  total_value: string;
+  invested_value: string;
+  total_return: string;
+  total_return_pct: number;
+  realized_pnl: string;
+  unrealized_pnl: string;
+  max_risk_per_trade_pct: number;
+  max_position_pct: number;
+  positions: PaperPosition[];
+  trades: PaperTrade[];
+};
+
+export type RiskPlan = {
+  ticker: string;
+  portfolio_value: string;
+  entry_price: string;
+  invalidation_price: string;
+  target_price: string | null;
+  risk_pct: number;
+  risk_budget: string;
+  risk_per_share: string;
+  suggested_shares: string;
+  suggested_position_value: string;
+  position_pct: number;
+  reward_risk_ratio: number | null;
+  warnings: string[];
+};
