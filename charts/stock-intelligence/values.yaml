@@ -88,10 +88,10 @@ config:
   liveQuoteBatchSize: 240
   liveQuoteChunkSize: 40
   liveFreshSeconds: 180
-  # Run the analyzer loops inside the backend so scanning never stops. If you run
-  # a dedicated continuous-analyzer pod instead, set backendRunDeepLoop false.
-  backendRunLiveLoop: true
-  backendRunDeepLoop: true
+  # The dedicated analyzer Deployment owns both loops. Keeping them out of the
+  # API prevents duplicate analysis, excess provider calls, and DB pool pressure.
+  backendRunLiveLoop: false
+  backendRunDeepLoop: false
 
 secrets:
   # For GitOps, create this Secret out-of-band and set existingSecret.

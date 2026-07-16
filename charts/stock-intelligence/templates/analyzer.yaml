@@ -4,6 +4,10 @@ kind: Deployment
 metadata:
   name: {{ include "stock-intelligence.fullname" . }}-analyzer
   namespace: {{ .Values.namespace.name }}
+  annotations:
+    # The backend init-container applies migrations in wave 1. Do not let the
+    # analyzer execute new-model queries until that rollout is healthy.
+    argocd.argoproj.io/sync-wave: "2"
   labels:
     {{- include "stock-intelligence.labels" . | nindent 4 }}
     app.kubernetes.io/component: pipeline

@@ -3,11 +3,20 @@ kind: Deployment
 metadata:
   name: {{ include "stock-intelligence.fullname" . }}-backend
   namespace: {{ .Values.namespace.name }}
+  annotations:
+    # Base resources/PostgreSQL are wave 0. The API owns schema migration and
+    # must become healthy before the analyzer is allowed to start.
+    argocd.argoproj.io/sync-wave: "1"
   labels:
     {{- include "stock-intelligence.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
 spec:
   replicas: {{ .Values.backend.replicaCount }}
+  # A rolling update leaves the old, query-heavy API alive while the new pod's
+  # migration waits for database locks. Recreate gives migrations a quiet,
+  # deterministic window; one local-user replica makes the brief gap acceptable.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "stock-intelligence.selectorLabels" . | nindent 6 }}
