@@ -229,7 +229,19 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
             price=float(quote.close),
         )
 
+        # Retire the previous current row before publishing the new snapshot.
+        # The migration enforces one current row per company, making every
+        # screener query proportional to the universe rather than all history.
+        session.execute(
+            update(StockAnalysis)
+            .where(
+                StockAnalysis.company_id == company.id,
+                StockAnalysis.is_current.is_(True),
+            )
+            .values(is_current=False)
+        )
         analysis = StockAnalysis(
+            is_current=True,
             factor_scores=factor_scores,
             company_id=company.id,
             as_of=datetime.now(UTC),

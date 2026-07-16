@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
@@ -19,7 +20,9 @@ export default function TopNav({ online }: { online?: boolean }) {
     <nav className="topnav">
       <div className="shell">
         <Link className="brand" href="/">
-          <span className="brandMark">SI</span>
+          <span className="brandMark" aria-hidden="true">
+            <Image src="/stock-intelligence-mark.svg" width={32} height={32} alt="" priority />
+          </span>
           <span>Stock Intelligence</span>
         </Link>
         <div className="navLinks">

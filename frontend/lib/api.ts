@@ -76,7 +76,6 @@ export type ListItem = {
   risk_level: string;
   qualification: string;
   technical_indicators: TechnicalIndicators;
-  catalysts: Catalyst[];
 };
 
 export type PricePoint = {
@@ -143,6 +142,7 @@ export type Detail = ListItem & {
   bull_value: string;
   valuation_methods: Array<{ model: string; value: number; multiple: number }>;
   fundamentals: Fundamentals;
+  catalysts: Catalyst[];
   risks: Array<{ title: string; severity: string }>;
   thesis_breakers: string[];
   sources: Array<{ name: string; url: string }>;

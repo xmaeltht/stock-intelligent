@@ -27,6 +27,9 @@ class StockAnalysis(Base):
         ForeignKey("companies.id", ondelete="CASCADE"), index=True
     )
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    # Exactly one row per company is current. Keeping this explicit avoids an
+    # expensive correlated MAX(as_of) scan on every dashboard request.
+    is_current: Mapped[bool] = mapped_column(default=True, index=True)
     # Last time the fast live-quote loop refreshed current_price (null until the
     # first intraday refresh; falls back to as_of for display).
     price_as_of: Mapped[datetime | None] = mapped_column(

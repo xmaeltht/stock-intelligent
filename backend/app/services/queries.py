@@ -6,8 +6,6 @@ the route module and each service.
 """
 
 from sqlalchemy import case, or_, select
-from sqlalchemy.orm import aliased
-from sqlalchemy.sql import func
 
 from app.models.company import Company
 from app.models.stock_analysis import StockAnalysis
@@ -16,15 +14,8 @@ FACTOR_KEYS = ("value", "quality", "momentum", "growth", "income", "composite")
 
 
 def latest_ids():
-    """Subquery selecting the id of the most recent analysis for each company."""
-    prior = aliased(StockAnalysis)
-    latest_time = (
-        select(func.max(prior.as_of))
-        .where(prior.company_id == StockAnalysis.company_id)
-        .correlate(StockAnalysis)
-        .scalar_subquery()
-    )
-    return select(StockAnalysis.id).where(StockAnalysis.as_of == latest_time)
+    """Indexed subquery selecting the current analysis for each company."""
+    return select(StockAnalysis.id).where(StockAnalysis.is_current.is_(True))
 
 
 def eligible_conditions(settings):

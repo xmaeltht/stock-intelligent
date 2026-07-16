@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class CompanyBrief(BaseModel):
@@ -31,7 +31,15 @@ class AnalysisListItem(BaseModel):
     qualification: str
     technical_indicators: dict[str, object]
     factor_scores: dict[str, object] = {}
-    catalysts: list[dict[str, object]]
+
+    @field_validator("technical_indicators", mode="before")
+    @classmethod
+    def compact_indicators(cls, value: object) -> dict[str, object]:
+        """Keep table responses small; detail pages retain the full payload."""
+        if not isinstance(value, dict):
+            return {}
+        keys = ("signal", "rsi14", "trend_cross", "change_1d_pct", "spark")
+        return {key: value[key] for key in keys if key in value}
 
 
 class AnalysisRead(BaseModel):

@@ -11,8 +11,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, aliased, joinedload
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import Settings
 from app.models.company import Company
@@ -55,14 +55,7 @@ def is_market_open(now: datetime | None = None) -> bool:
 
 
 def _latest_ids_subquery():
-    prior = aliased(StockAnalysis)
-    latest_time = (
-        select(func.max(prior.as_of))
-        .where(prior.company_id == StockAnalysis.company_id)
-        .correlate(StockAnalysis)
-        .scalar_subquery()
-    )
-    return select(StockAnalysis.id).where(StockAnalysis.as_of == latest_time)
+    return select(StockAnalysis.id).where(StockAnalysis.is_current.is_(True))
 
 
 def select_live_targets(

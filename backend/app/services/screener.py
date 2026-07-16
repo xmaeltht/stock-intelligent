@@ -29,7 +29,6 @@ LIST_COLUMNS = (
     StockAnalysis.qualification,
     StockAnalysis.technical_indicators,
     StockAnalysis.factor_scores,
-    StockAnalysis.catalysts,
 )
 
 

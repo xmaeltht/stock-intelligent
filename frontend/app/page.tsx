@@ -20,7 +20,9 @@ import {
   type Summary,
 } from "../lib/api";
 
-const POLL_MS = 12000;
+const SUMMARY_POLL_MS = 15000;
+const LIST_POLL_MS = 45000;
+const ROW_LIMIT = 100;
 
 const SESSION_LABEL: Record<string, string> = {
   pre: "Pre-market · live scanning",
@@ -91,6 +93,7 @@ export default function Dashboard() {
   const [sortBy, setSortBy] = useState("rating");
   const [sortOrder, setSortOrder] = useState("desc");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [assetType, setAssetType] = useState("Stock");
   const [sector, setSector] = useState("all");
   const [sectors, setSectors] = useState<SectorsResponse | null>(null);
@@ -110,6 +113,8 @@ export default function Dashboard() {
 
   const prices = useRef<Map<string, number>>(new Map());
   const reqId = useRef(0);
+  const listAbort = useRef<AbortController | null>(null);
+  const summaryAbort = useRef<AbortController | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
@@ -121,18 +126,20 @@ export default function Dashboard() {
         ...(minVolume ? { min_volume: String(minVolume) } : {}),
         ...(signal !== "all" ? { signal } : {}),
         ...(watchedOnly ? { watched_only: "true" } : {}),
-        ...(search ? { search } : {}),
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
         ...(sector !== "all" ? { sector } : {}),
         sort_by: sortBy,
         sort_order: sortOrder,
-        limit: "250",
+        limit: String(ROW_LIMIT),
       });
       const id = ++reqId.current;
+      listAbort.current?.abort();
+      const controller = new AbortController();
+      listAbort.current = controller;
       if (!silent) setLoading(true);
       try {
-        const [nextSummary, nextAnalyses, nextWatched] = await Promise.all([
-          getJson<Summary>("/api/research/opportunities/summary"),
-          getJson<ListItem[]>(`/api/research/opportunities/list?${query}`),
+        const [nextAnalyses, nextWatched] = await Promise.all([
+          getJson<ListItem[]>(`/api/research/opportunities/list?${query}`, controller.signal),
           silent ? Promise.resolve(null) : fetchWatchlistTickers().catch(() => new Set<string>()),
         ]);
         if (id !== reqId.current) return; // a newer request superseded this one
@@ -145,7 +152,6 @@ export default function Dashboard() {
           if (prev != null && now !== prev) nextFlash[item.company.ticker] = now > prev ? "up" : "down";
           prices.current.set(item.company.ticker, now);
         }
-        setSummary(nextSummary);
         setAnalyses(nextAnalyses);
         if (nextWatched) setWatched(nextWatched);
         setError("");
@@ -155,15 +161,36 @@ export default function Dashboard() {
           if (flashTimer.current) clearTimeout(flashTimer.current);
           flashTimer.current = setTimeout(() => setFlash({}), 1100);
         }
-      } catch {
+      } catch (requestError) {
+        if (requestError instanceof DOMException && requestError.name === "AbortError") return;
         if (id === reqId.current && !silent) {
           setError("Research data is not available yet. Run the analyzer, then refresh.");
           setLoading(false);
         }
       }
     },
-    [minimum, maxPrice, minVolume, signal, sortBy, sortOrder, search, sector, assetType, watchedOnly],
+    [minimum, maxPrice, minVolume, signal, sortBy, sortOrder, debouncedSearch, sector, assetType, watchedOnly],
   );
+
+  const refreshSummary = useCallback(async () => {
+    summaryAbort.current?.abort();
+    const controller = new AbortController();
+    summaryAbort.current = controller;
+    try {
+      setSummary(await getJson<Summary>("/api/research/opportunities/summary", controller.signal));
+    } catch (requestError) {
+      if (!(requestError instanceof DOMException && requestError.name === "AbortError")) {
+        // The table remains usable during a transient telemetry failure.
+        setSummary((current) => current);
+      }
+    }
+  }, []);
+
+  // Searching no longer fires a full database query on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 280);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Load the sector list (with counts) for the sector filter.
   useEffect(() => {
@@ -216,18 +243,34 @@ export default function Dashboard() {
     load(false);
   }, [load, hydrated]);
 
+  // Summary telemetry is independent from table filters and uses a small,
+  // dedicated request instead of being redundantly fetched with every screen.
+  useEffect(() => {
+    refreshSummary();
+    const timer = setInterval(() => {
+      if (!document.hidden) refreshSummary();
+    }, SUMMARY_POLL_MS);
+    return () => {
+      clearInterval(timer);
+      summaryAbort.current?.abort();
+    };
+  }, [refreshSummary]);
+
   // Silent auto-poll so the screen updates live without a manual refresh.
   useEffect(() => {
     if (!live) return;
     const timer = setInterval(() => {
       if (!document.hidden) load(true);
-    }, POLL_MS);
-    return () => clearInterval(timer);
+    }, LIST_POLL_MS);
+    return () => {
+      clearInterval(timer);
+      listAbort.current?.abort();
+    };
   }, [live, load]);
 
   // Tick a clock so "updated Xs ago" labels count up between polls.
   useEffect(() => {
-    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    const timer = setInterval(() => setNowMs(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
 
@@ -543,8 +586,8 @@ export default function Dashboard() {
         {!screen && (
           <div className="resultBar">
             <span className="resultCount">
-              {loading ? "Loading…" : `${analyses.length}${analyses.length >= 250 ? "+" : ""} securities`}
-              {analyses.length >= 250 && <em> · showing top 250 — narrow filters or search to refine</em>}
+              {loading ? "Loading…" : `${analyses.length}${analyses.length >= ROW_LIMIT ? "+" : ""} securities`}
+              {analyses.length >= ROW_LIMIT && <em> · showing top {ROW_LIMIT} — narrow filters or search to refine</em>}
             </span>
             <span className="resultHint">
               {assetType === "ETF"

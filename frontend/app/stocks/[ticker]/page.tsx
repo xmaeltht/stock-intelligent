@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import TopNav from "../../../components/TopNav";
-import StockChart from "../../../components/StockChart";
 import DividendSection from "../../../components/DividendSection";
 import FactorRadar from "../../../components/FactorRadar";
 import {
@@ -21,6 +21,11 @@ import {
   type HistoryPoint,
   type PricePoint,
 } from "../../../lib/api";
+
+const StockChart = dynamic(() => import("../../../components/StockChart"), {
+  ssr: false,
+  loading: () => <div className="chartLoading" aria-label="Loading interactive chart" />,
+});
 
 function HistoryChart({ history }: { history: HistoryPoint[] }) {
   if (history.length < 2) {
