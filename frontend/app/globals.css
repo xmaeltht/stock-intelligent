@@ -367,6 +367,25 @@ tr.flash--down td { animation: flashDown 1.1s ease-out; }
 .factorChip--lo { color: var(--bear-bright, #ff7a7a); border-color: rgba(255,122,122,.3); background: rgba(255,122,122,.1); }
 @media (max-width: 720px) { .factorGrid { grid-template-columns: 1fr; justify-items: center; } }
 
+/* ── compare factor overlay ── */
+.compareFactors { margin-bottom: 16px; }
+.compareFactorGrid { display: grid; grid-template-columns: 260px 1fr; gap: 24px; align-items: center; }
+.compareFactorTable { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.compareFactorLegend { display: flex; flex-wrap: wrap; gap: 9px 15px; margin-bottom: 5px; padding-bottom: 11px;
+  border-bottom: 1px solid var(--glass-border); }
+.compareFactorTag { display: inline-flex; align-items: center; gap: 6px; font: 700 12px var(--mono); color: var(--text); }
+.compareFactorTag i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+.compareFactorRow { display: grid; align-items: center; gap: 8px; }
+.compareFactorLabel { font: 600 12px var(--sans); color: var(--muted); }
+.compareFactorCell { display: flex; align-items: center; gap: 7px; padding: 3px 7px; border-radius: 8px;
+  border: 1px solid transparent; }
+.compareFactorCell--lead { border-color: var(--glass-border-2); background: var(--glass); }
+.compareFactorMini { flex: 1; height: 7px; border-radius: 999px; background: var(--glass); overflow: hidden; min-width: 22px; }
+.compareFactorMini i { display: block; height: 100%; border-radius: 999px; transition: width .4s; }
+.compareFactorCell b { font: 700 12px var(--mono); color: var(--text); min-width: 22px; text-align: right; }
+.compareFactorNote { color: var(--faint); font-size: 11px; margin: 13px 0 0; }
+@media (max-width: 720px) { .compareFactorGrid { grid-template-columns: 1fr; } }
+
 /* ── dividend section ── */
 .divMetrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 6px 0 20px; }
 .divMetric { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px; padding: 11px 13px;
@@ -631,6 +650,16 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .askChip { padding: 4px 11px; border-radius: 999px; font: 600 12px var(--sans); color: var(--price, #5aa2ff);
   background: rgba(90,162,255,.1); border: 1px solid rgba(90,162,255,.3); }
 .askCount { margin-left: auto; color: var(--muted); font: 700 13px var(--mono); }
+
+/* ── thesis preset chips ── */
+.presetRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 16px; }
+.presetLabel { color: var(--faint); font: 600 10px var(--sans); letter-spacing: .06em; text-transform: uppercase; margin-right: 2px; }
+.presetChip { padding: 7px 13px; border-radius: 999px; border: 1px solid var(--glass-border); background: var(--glass);
+  color: var(--muted); font: 600 12.5px var(--sans); cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s; }
+.presetChip:hover { color: var(--text); border-color: var(--glass-border-2); }
+.presetChip.on { color: var(--blue, #5aa2ff); border-color: rgba(90,162,255,.45); background: rgba(90,162,255,.14);
+  box-shadow: 0 4px 16px -10px rgba(90,162,255,.7); }
 
 /* ── sector factor heatmap ── */
 .heatWrap { overflow-x: auto; }

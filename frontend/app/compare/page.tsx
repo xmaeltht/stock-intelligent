@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import TopNav from "../../components/TopNav";
+import CompareFactors from "../../components/CompareFactors";
 import { compact, getJson, money, pct, signalClass, type Detail } from "../../lib/api";
 
 function CompareContent() {
@@ -128,6 +129,8 @@ function CompareContent() {
       {!currentTickers.length && !loading && (
         <div className="notice">No tickers selected. Add some above, or star securities and open Compare from the watchlist.</div>
       )}
+
+      {results.length > 0 && <CompareFactors items={results} />}
 
       {results.length > 0 && (
         <div className="compareGrid" style={{ gridTemplateColumns: `repeat(${Math.min(results.length, 3)}, 1fr)` }}>

@@ -30,6 +30,56 @@ const SESSION_LABEL: Record<string, string> = {
   closed: "Market closed · background scanning",
 };
 
+// One-tap "thesis" presets. Each applies a full, reproducible bundle of filters
+// (unset fields reset to their defaults) so a chip always yields the same view.
+type PresetFilters = {
+  assetType?: string;
+  sortBy: string;
+  sortOrder?: string;
+  minimum?: number;
+  signal?: string;
+  maxPrice?: number;
+  minVolume?: number;
+};
+const PRESETS: Array<{ key: string; label: string; hint: string; apply: PresetFilters }> = [
+  {
+    key: "strong-buy",
+    label: "Strong Buy",
+    hint: "Top of the blended action rating (Strong Buy first)",
+    apply: { sortBy: "rating" },
+  },
+  {
+    key: "deep-value",
+    label: "Deep Value",
+    hint: "Cheapest names on the Value factor, liquid enough to trade",
+    apply: { sortBy: "factor_value", minVolume: 100000 },
+  },
+  {
+    key: "quality",
+    label: "Quality Compounders",
+    hint: "Highest Quality-factor businesses",
+    apply: { sortBy: "factor_quality" },
+  },
+  {
+    key: "momentum",
+    label: "Momentum Breakouts",
+    hint: "Strongest Momentum factor with a bullish signal",
+    apply: { sortBy: "factor_momentum", signal: "Bullish", minVolume: 500000 },
+  },
+  {
+    key: "income",
+    label: "High Income",
+    hint: "Best Income factor — yield and shareholder return",
+    apply: { sortBy: "factor_income" },
+  },
+  {
+    key: "deep-upside",
+    label: "Deep Upside",
+    hint: "90%+ modeled upside, ranked by upside",
+    apply: { sortBy: "upside", minimum: 90 },
+  },
+];
+
 export default function Dashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [analyses, setAnalyses] = useState<ListItem[]>([]);
@@ -52,6 +102,7 @@ export default function Dashboard() {
   const [ask, setAsk] = useState("");
   const [screen, setScreen] = useState<ScreenResponse | null>(null);
   const [asking, setAsking] = useState(false);
+  const [activePreset, setActivePreset] = useState("");
   const [live, setLive] = useState(true);
   // Once the URL filters have been read back into state (so we can restore the
   // exact view on browser-back instead of resetting to the default screener).
@@ -180,9 +231,29 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
+  // Apply a thesis preset: reset every filter to its default, then layer the
+  // preset's overrides so the resulting view is always the same for a given chip.
+  const applyPreset = useCallback((preset: (typeof PRESETS)[number]) => {
+    const { apply } = preset;
+    setScreen(null);
+    setAsk("");
+    setSearch("");
+    setWatchedOnly(false);
+    setSector("all");
+    setAssetType(apply.assetType ?? "Stock");
+    setMinimum(apply.minimum ?? -100);
+    setSignal(apply.signal ?? "all");
+    setMaxPrice(apply.maxPrice ?? 0);
+    setMinVolume(apply.minVolume ?? 0);
+    setSortBy(apply.sortBy);
+    setSortOrder(apply.sortOrder ?? "desc");
+    setActivePreset(preset.key);
+  }, []);
+
   const runAsk = useCallback(async () => {
     const query = ask.trim();
     if (!query) return;
+    setActivePreset("");
     setAsking(true);
     try {
       const result = await getJson<ScreenResponse>(
@@ -266,6 +337,21 @@ export default function Dashboard() {
             {asking ? "…" : "Screen"}
           </button>
         </form>
+
+        <div className="presetRow">
+          <span className="presetLabel">Thesis</span>
+          {PRESETS.map((preset) => (
+            <button
+              key={preset.key}
+              type="button"
+              className={`presetChip${activePreset === preset.key && !screen ? " on" : ""}`}
+              title={preset.hint}
+              onClick={() => applyPreset(preset)}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
 
         {screen && (
           <div className="askResult">
@@ -420,7 +506,7 @@ export default function Dashboard() {
           </label>
           <label>
             Rank by
-            <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+            <select value={sortBy} onChange={(event) => { setSortBy(event.target.value); setActivePreset(""); }}>
               <option value="rating">Rating (Strong Buy first)</option>
               <option value="factor_composite">Factor: Composite</option>
               <option value="factor_value">Factor: Value</option>
