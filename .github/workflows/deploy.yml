@@ -36,8 +36,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}-backend:${{ github.sha }}
             ghcr.io/${{ github.repository }}-backend:latest
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,scope=backend,mode=max
+          cache-from: type=gha,scope=backend-v2
+          cache-to: type=gha,scope=backend-v2,mode=max
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
