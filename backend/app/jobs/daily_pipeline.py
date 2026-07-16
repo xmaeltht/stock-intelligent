@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.error import HTTPError
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 
 from app.analysis.dividends import build_dividend_profile
 from app.analysis.etf import build_etf_analysis, build_technical_screen
@@ -252,6 +252,8 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
         session.add(analysis)
         company.analysis_attempted_at = datetime.now(UTC)
         company.analysis_error = None
+        session.flush()
+        prune_company_snapshots(session, company.id, get_settings().snapshot_retention)
         session.commit()
     log_event(
         "symbol_analyzed",
@@ -261,6 +263,32 @@ def analyze_symbol(symbol: str, sec: SecProvider, prices: NasdaqProvider) -> Non
         upside_pct=round(result["upside_pct"], 2),
         qualification=result["qualification"],
     )
+
+
+def prune_company_snapshots(session, company_id, keep: int) -> None:
+    """Cap stored snapshots per company and strip the heavy price-history blob
+    from every row except the newest. Keeps the table bounded without losing the
+    per-snapshot rating/price fields the backtest relies on. Assumes the newest
+    row is already flushed into the session."""
+    ids = list(
+        session.scalars(
+            select(StockAnalysis.id)
+            .where(StockAnalysis.company_id == company_id)
+            .order_by(StockAnalysis.as_of.desc())
+        )
+    )
+    if len(ids) < 2:
+        return
+    # The row that was the latest before this one is now superseded — it no
+    # longer needs its full price history (only the current latest is charted).
+    session.execute(
+        update(StockAnalysis)
+        .where(StockAnalysis.id == ids[1])
+        .values(price_history=[])
+    )
+    # Delete anything beyond the retention window.
+    if len(ids) > keep:
+        session.execute(delete(StockAnalysis).where(StockAnalysis.id.in_(ids[keep:])))
 
 
 def mark_analysis_failure(symbol: str, error: Exception) -> None:

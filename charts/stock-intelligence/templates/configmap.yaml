@@ -21,6 +21,7 @@ data:
   ANALYSIS_LOOP_DELAY_SECONDS: {{ .Values.config.analysisLoopDelaySeconds | quote }}
   ANALYSIS_IDLE_SECONDS: {{ .Values.config.analysisIdleSeconds | quote }}
   UNIVERSE_REFRESH_HOURS: {{ .Values.config.universeRefreshHours | quote }}
+  SNAPSHOT_RETENTION: {{ .Values.config.snapshotRetention | quote }}
   ANALYSIS_EXCHANGES: {{ .Values.config.analysisExchanges | quote }}
   LIVE_QUOTES_ENABLED: {{ .Values.config.liveQuotesEnabled | quote }}
   LIVE_QUOTE_INTERVAL_SECONDS: {{ .Values.config.liveQuoteIntervalSeconds | quote }}

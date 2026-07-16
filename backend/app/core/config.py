@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     analysis_loop_delay_seconds: int = Field(default=5, ge=0, le=300)
     analysis_idle_seconds: int = Field(default=300, ge=10, le=3600)
     universe_refresh_hours: int = Field(default=24, ge=1, le=168)
+    # Snapshot retention: cap analyses kept per company so the table can't grow
+    # without bound. Older-than-latest snapshots also drop their heavy price
+    # history (only the latest row needs it for the chart).
+    snapshot_retention: int = Field(default=60, ge=2, le=2000)
     analysis_exchanges: str = "Nasdaq,NYSE,NYSE American"
     # Fast live-quote loop: refreshes current price / 1D move for already-analyzed
     # securities far more often than the heavy fundamental loop can, so the screen
