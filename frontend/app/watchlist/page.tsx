@@ -48,7 +48,7 @@ export default function WatchlistPage() {
         {error && <div className="notice notice--error">{error}</div>}
         {rows && rows.length === 0 && (
           <div className="notice">
-            Nothing here yet. Star a security from the <Link href="/" style={{ color: "#74aef0" }}>screener</Link> or a stock page to track it.
+            Nothing here yet. Star a security from <Link href="/discover" style={{ color: "#74aef0" }}>Discover</Link> or a stock page to track it.
           </div>
         )}
 

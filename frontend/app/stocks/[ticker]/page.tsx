@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
-import Link from "next/link";
 import TopNav from "../../../components/TopNav";
+import StockChart from "../../../components/StockChart";
 import DividendSection from "../../../components/DividendSection";
 import FactorRadar from "../../../components/FactorRadar";
 import {
@@ -22,11 +21,6 @@ import {
   type HistoryPoint,
   type PricePoint,
 } from "../../../lib/api";
-
-const StockChart = dynamic(() => import("../../../components/StockChart"), {
-  ssr: false,
-  loading: () => <div className="chartLoading" aria-label="Loading interactive chart" />,
-});
 
 function HistoryChart({ history }: { history: HistoryPoint[] }) {
   if (history.length < 2) {
@@ -85,7 +79,7 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
   const goBack = () => {
     // Return to the exact previous view (filtered screener, watchlist, etc.).
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
-    else router.push("/");
+    else router.push("/discover");
   };
   const [ticker, setTicker] = useState("");
   const [data, setData] = useState<Detail | null>(null);
@@ -218,12 +212,6 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
             <p className="companyName">{data.company.name}</p>
           </div>
           <div style={{ display: "flex", gap: 18, alignItems: "end" }}>
-            <Link
-              className="btn btn--primary"
-              href={`/portfolio?ticker=${encodeURIComponent(data.company.ticker)}&price=${data.current_price}&target=${technicalOnly ? "" : data.fair_value}&stop=${indicators.support ?? (technicalOnly ? "" : data.bear_value)}`}
-            >
-              Plan paper trade
-            </Link>
             <button className={`watchBtn${watched ? " on" : ""}`} onClick={onToggleWatch}>
               {watched ? "★ Watching" : "☆ Watch"}
             </button>
