@@ -243,6 +243,38 @@ def test_paper_portfolio_rejects_overselling(client: TestClient) -> None:
     assert response.status_code == 409
 
 
+def test_alerts_require_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/alerts").status_code == 401
+    assert client.get("/api/v1/alerts/events").status_code == 401
+
+
+def test_alert_rule_crud(client: TestClient) -> None:
+    _register(client)
+    created = client.post(
+        "/api/v1/alerts",
+        json={"ticker": "TEST", "kind": "price_below", "threshold": 20},
+    )
+    assert created.status_code == 201, created.text
+    rule = created.json()
+    assert rule["ticker"] == "TEST" and rule["kind"] == "price_below"
+
+    assert len(client.get("/api/v1/alerts").json()) == 1
+    # Condition (price 15.95 < 20) is already true at creation, so no crossing → no events.
+    assert client.get("/api/v1/alerts/events").json() == []
+    assert client.get("/api/v1/alerts/unread-count").json()["count"] == 0
+
+    assert client.delete(f"/api/v1/alerts/{rule['id']}").status_code == 204
+    assert client.get("/api/v1/alerts").json() == []
+
+
+def test_alert_unknown_ticker_rejected(client: TestClient) -> None:
+    _register(client)
+    resp = client.post(
+        "/api/v1/alerts", json={"ticker": "NOPE", "kind": "price_above", "threshold": 5}
+    )
+    assert resp.status_code == 404
+
+
 def test_paper_portfolio_is_per_user(client: TestClient) -> None:
     _register(client, "trader1@example.com")
     client.post(

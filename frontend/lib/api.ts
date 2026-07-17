@@ -500,3 +500,38 @@ export async function postJson<T>(url: string, body: unknown): Promise<T> {
   }
   return response.json() as Promise<T>;
 }
+
+// ── alerts ───────────────────────────────────────────────────────────────
+export type AlertKind = "price_below" | "price_above" | "upside_above";
+
+export const ALERT_KIND_LABEL: Record<AlertKind, string> = {
+  price_below: "Price below",
+  price_above: "Price above",
+  upside_above: "Upside above",
+};
+
+export type AlertRule = {
+  id: string;
+  ticker: string;
+  name: string;
+  kind: AlertKind;
+  threshold: string;
+  active: boolean;
+  created_at: string;
+};
+
+export type AlertEvent = {
+  id: string;
+  ticker: string;
+  name: string;
+  kind: AlertKind;
+  message: string;
+  price_at: string | null;
+  created_at: string;
+  read_at: string | null;
+};
+
+export async function deleteJson(url: string): Promise<void> {
+  const response = await fetch(url, { method: "DELETE" });
+  if (!response.ok && response.status !== 204) throw new Error(`Request failed: ${response.status}`);
+}
