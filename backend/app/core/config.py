@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # to avoid duplicate work.
     backend_run_live_loop: bool = True
     backend_run_deep_loop: bool = True
+    # Auth: HMAC secret for signing session cookies (override in production via the
+    # SESSION_SECRET env/secret), whether the cookie requires HTTPS, and its lifetime.
+    session_secret: str = Field(default="dev-insecure-session-secret-change-me", repr=False)
+    session_cookie_secure: bool = True
+    session_ttl_hours: int = Field(default=720, ge=1, le=8760)
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_user: str = "stock_app"

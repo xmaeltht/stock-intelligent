@@ -32,3 +32,5 @@ data:
   LIVE_FRESH_SECONDS: {{ .Values.config.liveFreshSeconds | quote }}
   BACKEND_RUN_LIVE_LOOP: {{ .Values.config.backendRunLiveLoop | quote }}
   BACKEND_RUN_DEEP_LOOP: {{ .Values.config.backendRunDeepLoop | quote }}
+  SESSION_COOKIE_SECURE: {{ .Values.config.sessionCookieSecure | quote }}
+  SESSION_TTL_HOURS: {{ .Values.config.sessionTtlHours | quote }}

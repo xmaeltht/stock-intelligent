@@ -92,6 +92,10 @@ config:
   # API prevents duplicate analysis, excess provider calls, and DB pool pressure.
   backendRunLiveLoop: false
   backendRunDeepLoop: false
+  # Auth session cookie: require HTTPS (the site is served over TLS) and expire
+  # after 30 days. The signing secret itself lives in the Secret below.
+  sessionCookieSecure: true
+  sessionTtlHours: 720
 
 secrets:
   # For GitOps, create this Secret out-of-band and set existingSecret.
@@ -100,6 +104,9 @@ secrets:
   postgresUser: stock_app
   postgresPassword: REPLACE_ME
   postgresDatabase: stock_intelligence
+  # HMAC key that signs auth session cookies. MUST be overridden with a long
+  # random value before real use (e.g. `openssl rand -hex 32`).
+  sessionSecret: REPLACE_ME_WITH_A_LONG_RANDOM_STRING
 
 gateway:
   enabled: true
