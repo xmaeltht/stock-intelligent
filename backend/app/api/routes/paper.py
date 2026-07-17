@@ -5,8 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.paper_portfolio import PaperTrade
+from app.models.user import User
 from app.schemas.paper import (
     PaperPortfolioRead,
     PaperPortfolioUpdate,
@@ -25,15 +27,20 @@ router = APIRouter()
 
 
 @router.get("", response_model=PaperPortfolioRead)
-def portfolio(db: Annotated[Session, Depends(get_db)]) -> dict:
-    return build_portfolio(db)
+def portfolio(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    return build_portfolio(db, user)
 
 
 @router.put("/settings", response_model=PaperPortfolioRead)
 def update_settings(
-    payload: PaperPortfolioUpdate, db: Annotated[Session, Depends(get_db)]
+    payload: PaperPortfolioUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
-    portfolio = get_or_create_portfolio(db)
+    portfolio = get_or_create_portfolio(db, user)
     if payload.name is not None:
         portfolio.name = payload.name
     if payload.starting_cash is not None:
@@ -51,15 +58,23 @@ def update_settings(
     if payload.max_position_pct is not None:
         portfolio.max_position_pct = payload.max_position_pct
     db.commit()
-    return build_portfolio(db)
+    return build_portfolio(db, user)
 
 
 @router.post("/plan", response_model=RiskPlanRead)
-def risk_plan(payload: RiskPlanCreate, db: Annotated[Session, Depends(get_db)]) -> dict:
-    return build_risk_plan(db, payload)
+def risk_plan(
+    payload: RiskPlanCreate,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    return build_risk_plan(db, payload, user)
 
 
 @router.post("/trades", response_model=PaperPortfolioRead, status_code=201)
-def trade(payload: PaperTradeCreate, db: Annotated[Session, Depends(get_db)]) -> dict:
-    execute_trade(db, payload)
-    return build_portfolio(db)
+def trade(
+    payload: PaperTradeCreate,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    execute_trade(db, payload, user)
+    return build_portfolio(db, user)

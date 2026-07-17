@@ -12,6 +12,10 @@ class PaperPortfolio(Base):
     __tablename__ = "paper_portfolios"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    # One portfolio per user (nullable so the pre-accounts row migrates cleanly).
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=True
+    )
     name: Mapped[str] = mapped_column(String(120), default="My paper portfolio")
     starting_cash: Mapped[Decimal] = mapped_column(Numeric(20, 2), default=Decimal("100000"))
     cash_balance: Mapped[Decimal] = mapped_column(Numeric(20, 2), default=Decimal("100000"))

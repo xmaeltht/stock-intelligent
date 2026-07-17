@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.company import Company
 from app.models.paper_portfolio import PaperPortfolio, PaperTrade
 from app.models.stock_analysis import StockAnalysis
+from app.models.user import User
 from app.schemas.paper import PaperTradeCreate, RiskPlanCreate
 
 MONEY = Decimal("0.01")
@@ -17,10 +18,11 @@ def _money(value: Decimal) -> Decimal:
     return value.quantize(MONEY)
 
 
-def get_or_create_portfolio(db: Session) -> PaperPortfolio:
-    portfolio = db.scalar(select(PaperPortfolio).order_by(PaperPortfolio.created_at).limit(1))
+def get_or_create_portfolio(db: Session, user: User) -> PaperPortfolio:
+    portfolio = db.scalar(select(PaperPortfolio).where(PaperPortfolio.user_id == user.id))
     if portfolio is None:
         portfolio = PaperPortfolio(
+            user_id=user.id,
             name="My paper portfolio",
             starting_cash=Decimal("100000"),
             cash_balance=Decimal("100000"),
@@ -79,8 +81,8 @@ def _position_state(trades: list[PaperTrade]) -> tuple[dict, Decimal]:
     return positions, realized
 
 
-def build_portfolio(db: Session) -> dict:
-    portfolio = get_or_create_portfolio(db)
+def build_portfolio(db: Session, user: User) -> dict:
+    portfolio = get_or_create_portfolio(db, user)
     trades = _trades(db, portfolio)
     state, realized = _position_state(trades)
     held_ids = [company_id for company_id, item in state.items() if item["quantity"] > 0]
@@ -172,8 +174,8 @@ def build_portfolio(db: Session) -> dict:
     }
 
 
-def execute_trade(db: Session, payload: PaperTradeCreate) -> PaperTrade:
-    portfolio = get_or_create_portfolio(db)
+def execute_trade(db: Session, payload: PaperTradeCreate, user: User) -> PaperTrade:
+    portfolio = get_or_create_portfolio(db, user)
     company = db.scalar(select(Company).where(Company.ticker == payload.ticker.upper()))
     if company is None:
         raise HTTPException(status_code=404, detail="Unknown ticker")
@@ -224,8 +226,8 @@ def execute_trade(db: Session, payload: PaperTradeCreate) -> PaperTrade:
     return trade
 
 
-def build_risk_plan(db: Session, payload: RiskPlanCreate) -> dict:
-    portfolio = get_or_create_portfolio(db)
+def build_risk_plan(db: Session, payload: RiskPlanCreate, user: User) -> dict:
+    portfolio = get_or_create_portfolio(db, user)
     company = db.scalar(select(Company).where(Company.ticker == payload.ticker.upper()))
     if company is None:
         raise HTTPException(status_code=404, detail="Unknown ticker")
@@ -241,7 +243,7 @@ def build_risk_plan(db: Session, payload: RiskPlanCreate) -> dict:
     stop = Decimal(payload.invalidation_price)
     if stop >= entry:
         raise HTTPException(status_code=422, detail="Invalidation price must be below entry")
-    summary = build_portfolio(db)
+    summary = build_portfolio(db, user)
     total_value = Decimal(summary["total_value"])
     risk_pct = payload.risk_pct or portfolio.max_risk_per_trade_pct
     risk_budget = total_value * Decimal(str(risk_pct)) / 100

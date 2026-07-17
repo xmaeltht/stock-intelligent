@@ -133,10 +133,13 @@ def test_research_endpoints_respond(client: TestClient) -> None:
         "/api/v1/opportunities/stocks/TEST",
         "/api/v1/opportunities/stocks/TEST/history",
         "/api/v1/opportunities/compare?tickers=TEST,FAKE",
-        "/api/v1/paper",
     ):
         response = client.get(path)
         assert response.status_code == 200, (path, response.text[:300])
+
+
+def test_paper_requires_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/paper").status_code == 401
 
 
 def _register(client: TestClient, email: str = "watcher@example.com") -> None:
@@ -191,6 +194,7 @@ def test_unknown_watchlist_ticker_is_rejected(client: TestClient) -> None:
 
 
 def test_paper_portfolio_plan_and_trade_journal(client: TestClient) -> None:
+    _register(client)
     initial = client.get("/api/v1/paper").json()
     assert initial["total_value"] == "100000.00"
     plan = client.post(
@@ -231,11 +235,27 @@ def test_paper_portfolio_plan_and_trade_journal(client: TestClient) -> None:
 
 
 def test_paper_portfolio_rejects_overselling(client: TestClient) -> None:
+    _register(client)
     response = client.post(
         "/api/v1/paper/trades",
         json={"ticker": "TEST", "side": "SELL", "quantity": 1, "price": 15},
     )
     assert response.status_code == 409
+
+
+def test_paper_portfolio_is_per_user(client: TestClient) -> None:
+    _register(client, "trader1@example.com")
+    client.post(
+        "/api/v1/paper/trades",
+        json={"ticker": "TEST", "side": "BUY", "quantity": 5, "price": 15},
+    )
+    assert client.get("/api/v1/paper").json()["positions"][0]["ticker"] == "TEST"
+    # A second account gets a fresh, empty portfolio.
+    client.post("/api/v1/auth/logout")
+    _register(client, "trader2@example.com")
+    second = client.get("/api/v1/paper").json()
+    assert second["positions"] == []
+    assert second["cash_balance"] == "100000.00"
 
 
 def test_failure_summary_groups_errors(client: TestClient) -> None:
