@@ -472,3 +472,31 @@ export type RiskPlan = {
   reward_risk_ratio: number | null;
   warnings: string[];
 };
+
+export type PaperTradeInput = {
+  ticker: string;
+  side: "BUY" | "SELL";
+  quantity: number;
+  price?: number | null;
+  thesis?: string | null;
+};
+
+export async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let detail = `Request failed: ${response.status}`;
+    try {
+      const parsed = await response.json();
+      if (typeof parsed?.detail === "string") detail = parsed.detail;
+      else if (Array.isArray(parsed?.detail) && parsed.detail[0]?.msg) detail = parsed.detail[0].msg;
+    } catch {
+      /* non-JSON */
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<T>;
+}

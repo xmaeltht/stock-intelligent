@@ -812,3 +812,29 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .signInInner p { margin: 0 auto 20px; color: var(--muted); font-size: 14px; line-height: 1.55; max-width: 400px; }
 .signInActions { display: flex; gap: 11px; justify-content: center; flex-wrap: wrap; }
 .signInNote { margin: 18px 0 0; color: var(--faint); font-size: 12px; }
+
+/* ── portfolio ── */
+.pfHeadValue { text-align: right; }
+.pfHeadTotal { font: 800 30px var(--mono); letter-spacing: -.02em; }
+.pfHeadReturn { font: 700 14px var(--mono); margin-top: 2px; }
+.pfHeadReturn.up { color: var(--bull-bright); }
+.pfHeadReturn.down { color: var(--bear-bright); }
+.stat strong.up { color: var(--bull-bright); }
+.stat strong.down { color: var(--bear-bright); }
+.pfTradeForm { padding: 16px 18px; margin: 4px 0 22px; }
+.pfFormTitle { font: 800 14px var(--sans); letter-spacing: -.01em; margin-bottom: 12px; }
+.pfFormRow { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.pfFormRow label, .pfThesis { display: flex; flex-direction: column; gap: 6px;
+  font: 600 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pfFormRow label { flex: 1 1 120px; }
+.pfThesis { margin-top: 12px; }
+.pfOpt { color: var(--faint); font-weight: 500; text-transform: none; letter-spacing: 0; }
+.pfSubmit { flex: 0 0 auto; min-height: 40px; }
+.pfFormError { color: var(--bear-bright); font: 600 12.5px var(--sans); margin-top: 11px;
+  background: rgba(255,107,125,.1); border: 1px solid rgba(255,107,125,.3); border-radius: 9px; padding: 8px 11px; }
+.pfSection { font: 800 16px var(--sans); letter-spacing: -.01em; margin: 24px 0 12px; }
+.pfSide { font: 800 10.5px var(--mono); padding: 3px 8px; border-radius: 6px; letter-spacing: .04em; }
+.pfSide--buy { color: var(--bull-bright); background: rgba(56,224,160,.13); }
+.pfSide--sell { color: var(--bear-bright); background: rgba(255,107,125,.13); }
+.pfThesisCell { color: var(--muted); font-size: 12.5px; max-width: 320px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
