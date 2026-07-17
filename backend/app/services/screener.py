@@ -94,6 +94,7 @@ def list_analyses(
     min_growth: int | None = None,
     min_income: int | None = None,
     watched_only: bool = False,
+    watched_user_id=None,
     search: str | None = None,
     sector: str | None = None,
     asset_type: str = "Stock",
@@ -147,7 +148,18 @@ def list_analyses(
     if watched_only:
         from app.models.watchlist import WatchlistEntry
 
-        filters.append(StockAnalysis.company_id.in_(select(WatchlistEntry.company_id)))
+        if watched_user_id is None:
+            # Anonymous visitors have no watchlist — return nothing rather than
+            # leaking every user's starred tickers.
+            filters.append(StockAnalysis.id.is_(None))
+        else:
+            filters.append(
+                StockAnalysis.company_id.in_(
+                    select(WatchlistEntry.company_id).where(
+                        WatchlistEntry.user_id == watched_user_id
+                    )
+                )
+            )
     if search:
         pattern = f"%{search.strip()}%"
         filters.append(Company.ticker.ilike(pattern) | Company.name.ilike(pattern))

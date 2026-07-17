@@ -8,11 +8,13 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, joinedload, load_only
 
 from app.analysis.valuation import IMPLAUSIBLE_UPSIDE_PCT
+from app.api.deps import get_optional_user
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.jobs.live_quotes import is_market_open, market_session
 from app.models.company import Company
 from app.models.stock_analysis import StockAnalysis
+from app.models.user import User
 from app.schemas.analysis import (
     AnalysisHistoryPoint,
     AnalysisListItem,
@@ -146,6 +148,7 @@ def opportunities(
     min_growth: Annotated[int | None, Query(ge=0, le=100)] = None,
     min_income: Annotated[int | None, Query(ge=0, le=100)] = None,
     watched_only: bool = False,
+    user: Annotated[User | None, Depends(get_optional_user)] = None,
     search: Annotated[str | None, Query(max_length=100)] = None,
     sector: Annotated[str | None, Query(max_length=64)] = None,
     asset_type: Literal["all", "Stock", "ETF"] = "Stock",
@@ -191,6 +194,7 @@ def opportunities(
         min_growth=min_growth,
         min_income=min_income,
         watched_only=watched_only,
+        watched_user_id=user.id if user else None,
         search=search,
         sector=sector,
         asset_type=asset_type,

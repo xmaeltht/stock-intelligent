@@ -35,7 +35,8 @@ def client():
 
     app.dependency_overrides[get_db] = override
     _seed(session_factory)
-    yield TestClient(app)
+    # https base_url so the Secure auth session cookie is retained across calls.
+    yield TestClient(app, base_url="https://testserver")
     app.dependency_overrides.clear()
 
 
@@ -132,12 +133,15 @@ def test_research_endpoints_respond(client: TestClient) -> None:
         "/api/v1/opportunities/stocks/TEST",
         "/api/v1/opportunities/stocks/TEST/history",
         "/api/v1/opportunities/compare?tickers=TEST,FAKE",
-        "/api/v1/watchlist",
-        "/api/v1/watchlist/tickers",
         "/api/v1/paper",
     ):
         response = client.get(path)
         assert response.status_code == 200, (path, response.text[:300])
+
+
+def _register(client: TestClient, email: str = "watcher@example.com") -> None:
+    resp = client.post("/api/v1/auth/register", json={"email": email, "password": "supersecret1"})
+    assert resp.status_code == 201, resp.text
 
 
 def test_list_payload_stays_lean(client: TestClient) -> None:
@@ -154,7 +158,13 @@ def test_detail_includes_fundamentals_and_new_technicals(client: TestClient) -> 
     assert len(detail["technical_indicators"]["checks"]) == 6
 
 
+def test_watchlist_requires_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/watchlist").status_code == 401
+    assert client.post("/api/v1/watchlist/TEST").status_code == 401
+
+
 def test_watchlist_round_trip(client: TestClient) -> None:
+    _register(client)
     assert client.post("/api/v1/watchlist/TEST").status_code == 201
     rows = client.get("/api/v1/watchlist").json()
     assert rows and rows[0]["ticker"] == "TEST" and rows[0]["latest"]
@@ -165,7 +175,18 @@ def test_watchlist_round_trip(client: TestClient) -> None:
     assert client.get("/api/v1/watchlist/tickers").json() == []
 
 
+def test_watchlist_is_per_user(client: TestClient) -> None:
+    _register(client, "a@example.com")
+    assert client.post("/api/v1/watchlist/TEST").status_code == 201
+    assert client.get("/api/v1/watchlist/tickers").json() == ["TEST"]
+    # A different account starts with an empty watchlist.
+    client.post("/api/v1/auth/logout")
+    _register(client, "b@example.com")
+    assert client.get("/api/v1/watchlist/tickers").json() == []
+
+
 def test_unknown_watchlist_ticker_is_rejected(client: TestClient) -> None:
+    _register(client)
     assert client.post("/api/v1/watchlist/NOPE").status_code == 404
 
 

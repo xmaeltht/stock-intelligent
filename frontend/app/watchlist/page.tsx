@@ -3,17 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import TopNav from "../../components/TopNav";
+import SignInPrompt from "../../components/SignInPrompt";
+import { useAuth } from "../../lib/auth";
 import { getJson, money, pct, signalClass, toggleWatch, type WatchlistRow } from "../../lib/api";
 
 export default function WatchlistPage() {
+  const { user, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<WatchlistRow[] | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
+    if (!user) return;
     getJson<WatchlistRow[]>("/api/research/watchlist")
       .then(setRows)
       .catch(() => setError("The watchlist could not be loaded."));
-  }, []);
+  }, [user]);
 
   useEffect(load, [load]);
 
@@ -44,6 +48,13 @@ export default function WatchlistPage() {
             <Link className="btn" href={compareHref}>Compare side by side →</Link>
           )}
         </div>
+
+        {!authLoading && !user && (
+          <SignInPrompt
+            title="Sign in to use your watchlist"
+            body="Create a free account to star securities and follow their ratings, fair values, and dividends over time."
+          />
+        )}
 
         {error && <div className="notice notice--error">{error}</div>}
         {rows && rows.length === 0 && (

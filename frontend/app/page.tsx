@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import TopNav from "../components/TopNav";
+import { useAuth } from "../lib/auth";
 import {
   getJson,
   money,
@@ -50,6 +51,7 @@ function greetingFor(date: Date): string {
 }
 
 export default function Home() {
+  const { user } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [radar, setRadar] = useState<RadarResponse | null>(null);
   const [ideas, setIdeas] = useState<IdeasResponse | null>(null);
@@ -211,9 +213,11 @@ export default function Home() {
             <div className="homePortfolioCta">
               <div className="homeCtaTitle">Track your portfolio</div>
               <p>Add holdings to see P&amp;L and factor exposure across everything you own.</p>
-              <button className="homeCtaBtn" type="button" disabled title="Accounts are coming soon">
-                Sign in to start · coming soon
-              </button>
+              {user ? (
+                <Link href="/portfolio" className="homeCtaBtn">Open portfolio →</Link>
+              ) : (
+                <Link href="/login?next=%2F" className="homeCtaBtn">Sign in to start</Link>
+              )}
             </div>
           </section>
         </div>
@@ -280,7 +284,11 @@ export default function Home() {
             </table>
           ) : (
             <p className="homeEmpty" style={{ padding: "22px 20px" }}>
-              Your watchlist is empty. Open <Link href="/discover" className="homeLink">Discover</Link> and star securities to track them here.
+              {user ? (
+                <>Your watchlist is empty. Open <Link href="/discover" className="homeLink">Discover</Link> and star securities to track them here.</>
+              ) : (
+                <><Link href="/login?next=%2F" className="homeLink">Sign in</Link> to build a watchlist and follow ratings, fair values, and dividends over time.</>
+              )}
             </p>
           )}
         </div>

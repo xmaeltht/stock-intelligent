@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "../lib/auth";
 
 const LINKS = [
   { href: "/", label: "Home" },
@@ -16,11 +17,13 @@ const DISCOVER_ROUTES = ["/discover", "/stocks", "/radar", "/ideas", "/market", 
 
 export default function TopNav({ online }: { online?: boolean }) {
   const pathname = usePathname();
+  const { user, loading, logout } = useAuth();
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     if (href === "/discover") return DISCOVER_ROUTES.some((route) => pathname.startsWith(route));
     return pathname.startsWith(href);
   };
+  const initial = (user?.display_name || user?.email || "?").charAt(0).toUpperCase();
   return (
     <nav className="topnav">
       <div className="shell">
@@ -37,8 +40,19 @@ export default function TopNav({ online }: { online?: boolean }) {
         </div>
         <span className="navMeta">
           <i className={online ? "statusDot statusDot--healthy" : "statusDot"} />
-          {online === undefined ? "Connecting" : online ? "Research API online" : "API offline"}
+          {online === undefined ? "Connecting" : online ? "Online" : "Offline"}
         </span>
+        {!loading &&
+          (user ? (
+            <span className="navAuth">
+              <span className="navAvatar" title={user.email}>{initial}</span>
+              <button className="navSignOut" onClick={() => logout()} title="Sign out">
+                Sign out
+              </button>
+            </span>
+          ) : (
+            <Link href="/login" className="navSignIn">Sign in</Link>
+          ))}
       </div>
     </nav>
   );

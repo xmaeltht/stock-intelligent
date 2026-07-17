@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import TopNav from "../../components/TopNav";
 import Sparkline from "../../components/Sparkline";
+import { useAuth } from "../../lib/auth";
 import {
   fetchWatchlistTickers,
   getJson,
@@ -81,6 +83,8 @@ const PRESETS: Array<{ key: string; label: string; hint: string; apply: PresetFi
 ];
 
 export default function Discover() {
+  const router = useRouter();
+  const { user } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [analyses, setAnalyses] = useState<ListItem[]>([]);
   const [watched, setWatched] = useState<Set<string>>(new Set());
@@ -269,6 +273,10 @@ export default function Discover() {
 
   const onToggleWatch = useCallback(
     async (ticker: string) => {
+      if (!user) {
+        router.push("/login?next=%2Fdiscover");
+        return;
+      }
       const isWatched = watched.has(ticker);
       setWatched((current) => {
         const next = new Set(current);
@@ -287,7 +295,7 @@ export default function Discover() {
         });
       }
     },
-    [watched],
+    [watched, user, router],
   );
 
   const toggleSort = (key: string) => {
