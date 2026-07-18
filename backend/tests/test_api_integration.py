@@ -275,6 +275,33 @@ def test_alert_unknown_ticker_rejected(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
+def test_billing_status_defaults_free(client: TestClient) -> None:
+    _register(client)
+    status = client.get("/api/v1/billing/status").json()
+    assert status["plan"] == "free"
+    assert status["is_pro"] is False
+    assert status["billing_enabled"] is False
+
+
+def test_checkout_disabled_without_stripe(client: TestClient) -> None:
+    _register(client)
+    assert client.post("/api/v1/billing/checkout").status_code == 503
+
+
+def test_free_plan_alert_limit(client: TestClient) -> None:
+    _register(client)
+    for kind, threshold in (("price_below", 20), ("price_above", 5), ("upside_above", 10)):
+        created = client.post(
+            "/api/v1/alerts", json={"ticker": "TEST", "kind": kind, "threshold": threshold}
+        )
+        assert created.status_code == 201, created.text
+    # Fourth exceeds the free limit.
+    fourth = client.post(
+        "/api/v1/alerts", json={"ticker": "TEST", "kind": "price_below", "threshold": 30}
+    )
+    assert fourth.status_code == 402
+
+
 def test_paper_portfolio_is_per_user(client: TestClient) -> None:
     _register(client, "trader1@example.com")
     client.post(

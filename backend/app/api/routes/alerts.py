@@ -7,6 +7,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user
+from app.core.entitlements import FREE_ALERT_LIMIT, is_pro
 from app.db.session import get_db
 from app.models.alert import AlertEvent, AlertRule
 from app.models.company import Company
@@ -66,6 +67,18 @@ def create_rule(
     company = db.scalar(select(Company).where(Company.ticker == payload.ticker.upper()))
     if company is None:
         raise HTTPException(status_code=404, detail="Unknown ticker")
+    if not is_pro(user):
+        count = db.scalar(
+            select(func.count()).select_from(AlertRule).where(AlertRule.user_id == user.id)
+        ) or 0
+        if count >= FREE_ALERT_LIMIT:
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    f"Free plan is limited to {FREE_ALERT_LIMIT} alerts. "
+                    "Upgrade to Pro for unlimited."
+                ),
+            )
     rule = AlertRule(
         user_id=user.id,
         company_id=company.id,

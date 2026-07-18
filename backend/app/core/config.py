@@ -58,6 +58,16 @@ class Settings(BaseSettings):
     session_secret: str = Field(default="dev-insecure-session-secret-change-me", repr=False)
     session_cookie_secure: bool = True
     session_ttl_hours: int = Field(default=720, ge=1, le=8760)
+    # Billing (Stripe). Empty keys leave billing disabled — checkout returns 503
+    # and everyone stays on the free plan. app_base_url is used for redirect URLs.
+    stripe_secret_key: str = Field(default="", repr=False)
+    stripe_webhook_secret: str = Field(default="", repr=False)
+    stripe_price_id: str = ""
+    app_base_url: str = "https://stock-intelligence.maelkloud.com"
+
+    @property
+    def billing_enabled(self) -> bool:
+        return bool(self.stripe_secret_key and self.stripe_price_id)
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_user: str = "stock_app"

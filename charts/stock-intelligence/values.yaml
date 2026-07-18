@@ -96,6 +96,10 @@ config:
   # after 30 days. The signing secret itself lives in the Secret below.
   sessionCookieSecure: true
   sessionTtlHours: 720
+  # Billing (Stripe). Leave the price id empty to keep billing disabled; set it
+  # plus the secret key below to enable Pro checkout. appBaseUrl builds redirects.
+  stripePriceId: ""
+  appBaseUrl: "https://stock-intelligence.maelkloud.com"
 
 secrets:
   # For GitOps, create this Secret out-of-band and set existingSecret.
@@ -107,6 +111,9 @@ secrets:
   # HMAC key that signs auth session cookies. MUST be overridden with a long
   # random value before real use (e.g. `openssl rand -hex 32`).
   sessionSecret: REPLACE_ME_WITH_A_LONG_RANDOM_STRING
+  # Stripe keys — fill these in (and stripePriceId above) to turn on Pro billing.
+  stripeSecretKey: ""
+  stripeWebhookSecret: ""
 
 gateway:
   enabled: true

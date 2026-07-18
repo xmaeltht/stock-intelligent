@@ -8,6 +8,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   upstream.search = request.nextUrl.search;
   try {
     const cookie = request.headers.get("cookie");
+    // Stripe signs webhooks with this header; it must reach the backend intact.
+    const stripeSig = request.headers.get("stripe-signature");
     const response = await fetch(upstream, {
       method: request.method,
       cache: "no-store",
@@ -16,6 +18,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
         "content-type": "application/json",
         // Forward the session cookie so authenticated calls reach the backend.
         ...(cookie ? { cookie } : {}),
+        ...(stripeSig ? { "stripe-signature": stripeSig } : {}),
       },
       body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.text(),
     });

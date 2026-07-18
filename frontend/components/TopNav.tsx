@@ -21,6 +21,7 @@ export default function TopNav({ online }: { online?: boolean }) {
   const pathname = usePathname();
   const { user, loading, logout } = useAuth();
   const [unread, setUnread] = useState(0);
+  const [pro, setPro] = useState(false);
 
   // Poll unread alerts while signed in; evaluation happens server-side.
   useEffect(() => {
@@ -41,6 +42,24 @@ export default function TopNav({ online }: { online?: boolean }) {
     return () => {
       alive = false;
       clearInterval(timer);
+    };
+  }, [user, pathname]);
+
+  // Reflect the current plan (Pro badge vs. Upgrade pill).
+  useEffect(() => {
+    if (!user) {
+      setPro(false);
+      return;
+    }
+    let alive = true;
+    fetch("/api/research/billing/status", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (alive && data) setPro(Boolean(data.is_pro));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
     };
   }, [user, pathname]);
 
@@ -74,6 +93,11 @@ export default function TopNav({ online }: { online?: boolean }) {
         {!loading &&
           (user ? (
             <span className="navAuth">
+              {pro ? (
+                <span className="navPro" title="Pro plan">PRO</span>
+              ) : (
+                <Link href="/pricing" className="navUpgrade">Upgrade</Link>
+              )}
               <span className="navAvatar" title={user.email}>{initial}</span>
               <button className="navSignOut" onClick={() => logout()} title="Sign out">
                 Sign out
