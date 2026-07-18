@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload, load_only
 
 from app.analysis.valuation import IMPLAUSIBLE_UPSIDE_PCT
 from app.api.deps import get_optional_user
+from app.core.cache import cached
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.jobs.live_quotes import is_market_open, market_session
@@ -106,7 +107,7 @@ def build_summary(db: Session) -> DashboardSummary:
 
 @router.get("/summary", response_model=DashboardSummary)
 def summary(db: Annotated[Session, Depends(get_db)]) -> DashboardSummary:
-    return build_summary(db)
+    return cached("summary", 15.0, lambda: build_summary(db))
 
 
 @router.get("/backtest")
@@ -114,20 +115,20 @@ def rating_backtest(db: Annotated[Session, Depends(get_db)]) -> dict:
     """Forward-return performance of each rating bucket, recomputed from the
     analyzer's own stored snapshot history. Research diagnostics — a measure of
     the rules' historical behavior, not a promise of future returns."""
-    return run_backtest(db)
+    return cached("backtest", 120.0, lambda: run_backtest(db))
 
 
 @router.get("/radar")
 def discovery_radar(db: Annotated[Session, Depends(get_db)]) -> dict:
     """Live market-wide radar: notable events (crosses, breakouts, unusual volume,
     movers, value setups) detected across every analyzed security right now."""
-    return build_radar(db)
+    return cached("radar", 20.0, lambda: build_radar(db))
 
 
 @router.get("/sector-factors")
 def sector_factors(db: Annotated[Session, Depends(get_db)]) -> dict:
     """Average factor scores by sector — the market-structure heatmap."""
-    return sector_factor_matrix(db)
+    return cached("sector_factors", 60.0, lambda: sector_factor_matrix(db))
 
 
 @router.get("/list", response_model=list[AnalysisListItem])
@@ -231,6 +232,10 @@ def sectors(
     asset_type: Literal["all", "Stock", "ETF"] = "all",
 ) -> dict:
     """Analyzed-security counts grouped by sector, for the sector filter/grouping."""
+    return cached(f"sectors:{asset_type}", 60.0, lambda: _build_sectors(db, asset_type))
+
+
+def _build_sectors(db: Session, asset_type: str) -> dict:
     settings = get_settings()
     conditions = [StockAnalysis.id.in_(latest_ids()), *eligible_conditions(settings)]
     if asset_type != "all":
@@ -251,6 +256,10 @@ def sectors(
 
 @router.get("/overview", response_model=MarketOverview)
 def market_overview(db: Annotated[Session, Depends(get_db)]) -> MarketOverview:
+    return cached("overview", 20.0, lambda: _build_overview(db))
+
+
+def _build_overview(db: Session) -> MarketOverview:
     settings = get_settings()
     rows = db.execute(
         select(
@@ -351,6 +360,10 @@ def ideas(
     """Two transparent, rules-based idea lists — swing (momentum/liquidity) and
     long-term (quality fundamentals + long-term uptrend). Deterministic screens,
     not personalized investment advice."""
+    return cached(f"ideas:{limit}", 30.0, lambda: _build_ideas(db, limit))
+
+
+def _build_ideas(db: Session, limit: int) -> IdeasResponse:
     settings = get_settings()
     rows = db.execute(
         select(

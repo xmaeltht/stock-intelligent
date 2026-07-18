@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.analysis.factors import build_factor_scores
 from app.analysis.technicals import build_technical_indicators
 from app.analysis.valuation import EMPTY_FINANCIALS, build_analysis
+from app.core.cache import clear_cache
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -34,6 +35,9 @@ def client():
             db.close()
 
     app.dependency_overrides[get_db] = override
+    # The universe-wide read endpoints cache per process; clear so each test's
+    # fresh in-memory DB is never served a prior test's cached payload.
+    clear_cache()
     _seed(session_factory)
     # https base_url so the Secure auth session cookie is retained across calls.
     yield TestClient(app, base_url="https://testserver")
