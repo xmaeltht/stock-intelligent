@@ -9,7 +9,7 @@ frontend:
   replicaCount: 1
   image:
     repository: ghcr.io/xmaeltht/stock-intelligent-frontend
-    tag: "78ac204e6de1a8310e1927f3aaefe23854ccdf3c" # gitops-managed
+    tag: "459a61d50dbeab310be5e53108e65b96dba64db1" # gitops-managed
     pullPolicy: IfNotPresent
     revision: "2026-07-13-06"
   service:
@@ -26,7 +26,7 @@ backend:
   replicaCount: 1
   image:
     repository: ghcr.io/xmaeltht/stock-intelligent-backend
-    tag: "78ac204e6de1a8310e1927f3aaefe23854ccdf3c" # gitops-managed
+    tag: "459a61d50dbeab310be5e53108e65b96dba64db1" # gitops-managed
     pullPolicy: IfNotPresent
     revision: "2026-07-13-06"
   service:
