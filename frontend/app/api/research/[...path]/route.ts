@@ -13,6 +13,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const response = await fetch(upstream, {
       method: request.method,
       cache: "no-store",
+      // Pass 3xx responses through (OAuth flow) instead of following them.
+      redirect: "manual",
       signal: AbortSignal.timeout(12000),
       headers: {
         "content-type": "application/json",
@@ -26,6 +28,9 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const headers = new Headers({
       "content-type": response.headers.get("content-type") ?? "application/json",
     });
+    // Relay redirects (Google OAuth start/callback) to the browser.
+    const location = response.headers.get("location");
+    if (location) headers.set("location", location);
     // Relay any Set-Cookie (login / logout) back to the browser.
     const setCookies =
       typeof response.headers.getSetCookie === "function"

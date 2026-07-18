@@ -885,3 +885,13 @@ html, body { max-width: 100%; overflow-x: hidden; }
   padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(240,192,90,.4); background: rgba(240,192,90,.1); }
 .navUpgrade:hover { background: rgba(240,192,90,.18); }
 @media (max-width: 720px) { .priceGrid { grid-template-columns: 1fr; } }
+
+/* ── google sign-in ── */
+.googleBtn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 44px;
+  border-radius: 11px; border: 1px solid var(--glass-border-2); background: var(--glass); color: var(--text);
+  text-decoration: none; font: 700 14px var(--sans); transition: background .15s, border-color .15s; }
+.googleBtn:hover { background: var(--glass-2); }
+.googleG { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; background: #fff;
+  color: #4285f4; font: 900 13px var(--sans); }
+.authDivider { display: flex; align-items: center; gap: 12px; color: var(--faint); font-size: 12px; margin: 15px 0 3px; }
+.authDivider::before, .authDivider::after { content: ""; flex: 1; height: 1px; background: var(--glass-border); }

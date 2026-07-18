@@ -40,3 +40,4 @@ data:
   SMTP_PORT: {{ .Values.config.smtpPort | quote }}
   SMTP_FROM: {{ .Values.config.smtpFrom | quote }}
   SMTP_USE_TLS: {{ .Values.config.smtpUseTls | quote }}
+  GOOGLE_CLIENT_ID: {{ .Values.config.googleClientId | quote }}

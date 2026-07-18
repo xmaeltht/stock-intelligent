@@ -275,6 +275,22 @@ def test_alert_unknown_ticker_rejected(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
+def test_auth_providers_google_disabled(client: TestClient) -> None:
+    assert client.get("/api/v1/auth/providers").json() == {"google": False}
+
+
+def test_google_start_disabled_without_config(client: TestClient) -> None:
+    assert client.get("/api/v1/auth/google/start").status_code == 503
+
+
+def test_google_callback_bad_state_redirects_to_login(client: TestClient) -> None:
+    resp = client.get(
+        "/api/v1/auth/google/callback?code=abc&state=nope", follow_redirects=False
+    )
+    assert resp.status_code == 302
+    assert "/login?error=google" in resp.headers["location"]
+
+
 def test_billing_status_defaults_free(client: TestClient) -> None:
     _register(client)
     status = client.get("/api/v1/billing/status").json()

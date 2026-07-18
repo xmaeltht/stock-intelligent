@@ -106,6 +106,8 @@ config:
   smtpPort: 587
   smtpFrom: ""
   smtpUseTls: true
+  # Google OAuth client id (public). Set this + the GOOGLE_CLIENT_SECRET secret to enable Google sign-in.
+  googleClientId: ""
 
 secrets:
   # For GitOps, create this Secret out-of-band and set existingSecret.
@@ -123,6 +125,8 @@ secrets:
   # SMTP auth for alert emails (leave empty to keep email off).
   smtpUser: ""
   smtpPassword: ""
+  # Google OAuth client secret.
+  googleClientSecret: ""
 
 gateway:
   enabled: true

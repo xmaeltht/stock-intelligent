@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     smtp_password: str = Field(default="", repr=False)
     smtp_from: str = ""
     smtp_use_tls: bool = True
+    # Google OAuth sign-in. Dormant until both client id + secret are set.
+    google_client_id: str = ""
+    google_client_secret: str = Field(default="", repr=False)
     # Billing (Stripe). Empty keys leave billing disabled — checkout returns 503
     # and everyone stays on the free plan. app_base_url is used for redirect URLs.
     stripe_secret_key: str = Field(default="", repr=False)
@@ -82,6 +85,14 @@ class Settings(BaseSettings):
     @property
     def email_enabled(self) -> bool:
         return bool(self.smtp_host and self.smtp_from)
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def google_redirect_uri(self) -> str:
+        return f"{self.app_base_url.rstrip('/')}/api/research/auth/google/callback"
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_user: str = "stock_app"

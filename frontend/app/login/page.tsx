@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import TopNav from "../../components/TopNav";
@@ -16,8 +16,18 @@ function LoginContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(params.get("error") === "google" ? "Google sign-in failed. Try again or use email." : "");
   const [busy, setBusy] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/research/auth/providers")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data) setGoogleEnabled(Boolean(data.google));
+      })
+      .catch(() => {});
+  }, []);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -46,6 +56,17 @@ function LoginContent() {
               : "Free forever — save watchlists and get your holdings scored."}
           </p>
         </div>
+
+        {googleEnabled && (
+          <>
+            {/* Real navigation (not next/link) so the browser follows the OAuth redirects. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a className="googleBtn" href="/api/research/auth/google/start">
+              <span className="googleG">G</span> Continue with Google
+            </a>
+            <div className="authDivider"><span>or</span></div>
+          </>
+        )}
 
         <form className="authForm" onSubmit={submit}>
           {mode === "signup" && (
