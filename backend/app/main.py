@@ -31,6 +31,17 @@ async def lifespan(app: FastAPI):
             )
         except Exception:  # noqa: BLE001 - never let workers block API startup
             logger.exception("failed to start background analyzer workers")
+    # Always run the lightweight alert-evaluation loop in the backend so alerts
+    # fire proactively regardless of where the analyzer loops live.
+    if settings.alerts_worker_enabled:
+        try:
+            from app.jobs.alerts_worker import start_alerts_worker
+
+            threads.append(
+                start_alerts_worker(_worker_stop, settings.alert_eval_interval_seconds)
+            )
+        except Exception:  # noqa: BLE001 - alerts must never block API startup
+            logger.exception("failed to start alerts worker")
     try:
         yield
     finally:

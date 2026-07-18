@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     session_secret: str = Field(default="dev-insecure-session-secret-change-me", repr=False)
     session_cookie_secure: bool = True
     session_ttl_hours: int = Field(default=720, ge=1, le=8760)
+    # Background alert evaluation: fire crossings even when no one is in the app.
+    alerts_worker_enabled: bool = True
+    alert_eval_interval_seconds: int = Field(default=300, ge=30, le=3600)
     # Billing (Stripe). Empty keys leave billing disabled — checkout returns 503
     # and everyone stays on the free plan. app_base_url is used for redirect URLs.
     stripe_secret_key: str = Field(default="", repr=False)

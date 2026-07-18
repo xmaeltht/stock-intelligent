@@ -9,7 +9,7 @@ from app.models.alert import AlertEvent, AlertRule
 from app.models.company import Company
 from app.models.stock_analysis import StockAnalysis
 from app.models.user import User
-from app.services.alerts import evaluate_alerts
+from app.services.alerts import evaluate_alerts, evaluate_all_active
 
 
 def _analysis(company_id, price, upside):
@@ -89,3 +89,25 @@ def test_condition_not_met_creates_no_event() -> None:
     _rule(session, user, company, "price_above", 20)  # 15.95 is not above 20
     assert evaluate_alerts(session, user) == 0
     assert _events(session) == []
+
+
+def test_evaluate_all_active_fires_for_every_user() -> None:
+    session, user, company = _setup(price=15.95)
+    user2 = User(email="c@d.com", password_hash="x")
+    session.add(user2)
+    session.flush()
+    _rule(session, user, company, "price_below", 20)  # met
+    session.add(
+        AlertRule(
+            user_id=user2.id,
+            company_id=company.id,
+            kind="price_below",
+            threshold=Decimal("20"),
+            last_state=False,
+        )
+    )
+    session.commit()
+    assert evaluate_all_active(session) == 2
+    events = _events(session)
+    assert len(events) == 2
+    assert {event.user_id for event in events} == {user.id, user2.id}

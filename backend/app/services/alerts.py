@@ -52,18 +52,8 @@ def current_analyses(db: Session, company_ids: set) -> dict:
     }
 
 
-def evaluate_alerts(db: Session, user: User) -> int:
-    """Evaluate the user's active rules; create events on new crossings.
-
-    Returns the number of events created.
-    """
-    rules = list(
-        db.scalars(
-            select(AlertRule)
-            .options(joinedload(AlertRule.company))
-            .where(AlertRule.user_id == user.id, AlertRule.active.is_(True))
-        )
-    )
+def _evaluate_rules(db: Session, rules: list[AlertRule]) -> int:
+    """Fire events for any rule that just crossed into its met state."""
     if not rules:
         return 0
     analyses = current_analyses(db, {rule.company_id for rule in rules})
@@ -78,7 +68,7 @@ def evaluate_alerts(db: Session, user: User) -> int:
             message = _message(rule.kind, rule.company.ticker, Decimal(rule.threshold), analysis)
             db.add(
                 AlertEvent(
-                    user_id=user.id,
+                    user_id=rule.user_id,
                     company_id=rule.company_id,
                     kind=rule.kind,
                     message=message,
@@ -92,3 +82,28 @@ def evaluate_alerts(db: Session, user: User) -> int:
     if created or dirty:
         db.commit()
     return created
+
+
+def evaluate_alerts(db: Session, user: User) -> int:
+    """Evaluate one user's active rules (on-demand, when they're in the app)."""
+    rules = list(
+        db.scalars(
+            select(AlertRule)
+            .options(joinedload(AlertRule.company))
+            .where(AlertRule.user_id == user.id, AlertRule.active.is_(True))
+        )
+    )
+    return _evaluate_rules(db, rules)
+
+
+def evaluate_all_active(db: Session) -> int:
+    """Evaluate every user's active rules — the background pass, so alerts fire
+    even when no one is looking. Returns the number of events created."""
+    rules = list(
+        db.scalars(
+            select(AlertRule)
+            .options(joinedload(AlertRule.company))
+            .where(AlertRule.active.is_(True))
+        )
+    )
+    return _evaluate_rules(db, rules)
