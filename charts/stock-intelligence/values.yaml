@@ -100,6 +100,12 @@ config:
   # plus the secret key below to enable Pro checkout. appBaseUrl builds redirects.
   stripePriceId: ""
   appBaseUrl: "https://stock-intelligence.maelkloud.com"
+  # Email delivery of alerts (Pro). Set smtpHost + smtpFrom (and the SMTP_USER /
+  # SMTP_PASSWORD secret) to turn on. Empty host keeps email off.
+  smtpHost: ""
+  smtpPort: 587
+  smtpFrom: ""
+  smtpUseTls: true
 
 secrets:
   # For GitOps, create this Secret out-of-band and set existingSecret.
@@ -114,6 +120,9 @@ secrets:
   # Stripe keys — fill these in (and stripePriceId above) to turn on Pro billing.
   stripeSecretKey: ""
   stripeWebhookSecret: ""
+  # SMTP auth for alert emails (leave empty to keep email off).
+  smtpUser: ""
+  smtpPassword: ""
 
 gateway:
   enabled: true

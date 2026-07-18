@@ -111,3 +111,42 @@ def test_evaluate_all_active_fires_for_every_user() -> None:
     events = _events(session)
     assert len(events) == 2
     assert {event.user_id for event in events} == {user.id, user2.id}
+
+
+def test_build_alert_email_formats() -> None:
+    from app.services.alerts import build_alert_email
+
+    event = AlertEvent(kind="price_below", message="TEST dropped below $20.00 — now $15.95")
+    subject, body = build_alert_email([event])
+    assert "1 new alert" in subject
+    assert "TEST dropped below" in body
+    assert "/alerts" in body
+
+
+def test_dispatch_emails_only_pro_users() -> None:
+    from app.services.alerts import dispatch_alert_emails
+
+    session, user, company = _setup(price=15.95)
+    user.plan = "pro"
+    free = User(email="free@x.com", password_hash="x", plan="free")
+    session.add(free)
+    session.flush()
+    session.add_all(
+        [
+            AlertEvent(
+                user_id=user.id, company_id=company.id, kind="price_below", message="pro msg"
+            ),
+            AlertEvent(
+                user_id=free.id, company_id=company.id, kind="price_below", message="free msg"
+            ),
+        ]
+    )
+    session.commit()
+
+    sent: list = []
+    count = dispatch_alert_emails(session, send=lambda to, s, b: sent.append(to))
+    assert count == 1
+    assert sent == [user.email]
+    # Both events are marked processed; a second pass sends nothing.
+    assert dispatch_alert_emails(session, send=lambda to, s, b: sent.append(to)) == 0
+    assert sent == [user.email]

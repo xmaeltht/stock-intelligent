@@ -9,8 +9,9 @@ import logging
 import threading
 from threading import Event
 
+from app.core.config import get_settings
 from app.db.session import SessionLocal
-from app.services.alerts import evaluate_all_active
+from app.services.alerts import dispatch_alert_emails, evaluate_all_active
 
 logger = logging.getLogger("stock-intelligence")
 
@@ -21,8 +22,9 @@ def run_alerts_loop(stop: Event, interval_seconds: int) -> None:
         try:
             with SessionLocal() as session:
                 created = evaluate_all_active(session)
-            if created:
-                logger.info("alerts worker created %d event(s)", created)
+                emailed = dispatch_alert_emails(session) if get_settings().email_enabled else 0
+            if created or emailed:
+                logger.info("alerts worker: %d event(s), %d email(s)", created, emailed)
         except Exception:  # noqa: BLE001 - never let one bad cycle end the loop
             logger.exception("alerts evaluation cycle failed")
         stop.wait(interval_seconds)

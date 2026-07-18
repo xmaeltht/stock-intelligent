@@ -5,14 +5,22 @@ once when the condition transitions from false to true (a crossing), tracked via
 `last_state`, so a rule that stays true doesn't spam the feed.
 """
 
+import logging
+from collections.abc import Callable
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.config import get_settings
+from app.core.entitlements import is_pro
 from app.models.alert import AlertEvent, AlertRule
 from app.models.stock_analysis import StockAnalysis
 from app.models.user import User
+from app.services.email import send_email
+
+logger = logging.getLogger("stock-intelligence")
 
 
 def condition_met(kind: str, threshold: Decimal, analysis: StockAnalysis) -> tuple[bool, Decimal]:
@@ -107,3 +115,56 @@ def evaluate_all_active(db: Session) -> int:
         )
     )
     return _evaluate_rules(db, rules)
+
+
+def build_alert_email(events: list[AlertEvent]) -> tuple[str, str]:
+    """Subject + plain-text body summarizing a batch of fired alerts."""
+    count = len(events)
+    subject = f"{count} new alert{'s' if count != 1 else ''} · Stock Intelligence"
+    base = get_settings().app_base_url.rstrip("/")
+    lines = ["Your watched securities crossed a threshold:", ""]
+    lines += [f"  • {event.message}" for event in events]
+    lines += ["", f"See details: {base}/alerts", ""]
+    lines.append("Stock Intelligence — research, not investment advice.")
+    return subject, "\n".join(lines)
+
+
+def dispatch_alert_emails(db: Session, send: Callable[[str, str, str], None] = send_email) -> int:
+    """Email un-dispatched events to their Pro owners, then mark them processed.
+
+    Free users' events are marked processed without an email (in-app only). A send
+    failure leaves the event unmarked so the next cycle retries. Returns emails sent.
+    """
+    pending = list(
+        db.scalars(
+            select(AlertEvent)
+            .where(AlertEvent.emailed_at.is_(None))
+            .order_by(AlertEvent.created_at)
+            .limit(200)
+        )
+    )
+    if not pending:
+        return 0
+    by_user: dict = {}
+    for event in pending:
+        by_user.setdefault(event.user_id, []).append(event)
+    users = {
+        user.id: user
+        for user in db.scalars(select(User).where(User.id.in_(by_user.keys())))
+    }
+    now = datetime.now(UTC)
+    sent = 0
+    for user_id, events in by_user.items():
+        user = users.get(user_id)
+        if user is not None and is_pro(user):
+            subject, body = build_alert_email(events)
+            try:
+                send(user.email, subject, body)
+            except Exception:  # noqa: BLE001 - retry next cycle, leave unmarked
+                logger.exception("failed to email %d alert(s) to %s", len(events), user.email)
+                continue
+            sent += len(events)
+        for event in events:
+            event.emailed_at = now
+    db.commit()
+    return sent

@@ -36,3 +36,7 @@ data:
   SESSION_TTL_HOURS: {{ .Values.config.sessionTtlHours | quote }}
   STRIPE_PRICE_ID: {{ .Values.config.stripePriceId | quote }}
   APP_BASE_URL: {{ .Values.config.appBaseUrl | quote }}
+  SMTP_HOST: {{ .Values.config.smtpHost | quote }}
+  SMTP_PORT: {{ .Values.config.smtpPort | quote }}
+  SMTP_FROM: {{ .Values.config.smtpFrom | quote }}
+  SMTP_USE_TLS: {{ .Values.config.smtpUseTls | quote }}

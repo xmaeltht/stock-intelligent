@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     # Background alert evaluation: fire crossings even when no one is in the app.
     alerts_worker_enabled: bool = True
     alert_eval_interval_seconds: int = Field(default=300, ge=30, le=3600)
+    # Email delivery of alerts (Pro only). Dormant until SMTP host + from are set.
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str = ""
+    smtp_password: str = Field(default="", repr=False)
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
     # Billing (Stripe). Empty keys leave billing disabled — checkout returns 503
     # and everyone stays on the free plan. app_base_url is used for redirect URLs.
     stripe_secret_key: str = Field(default="", repr=False)
@@ -71,6 +78,10 @@ class Settings(BaseSettings):
     @property
     def billing_enabled(self) -> bool:
         return bool(self.stripe_secret_key and self.stripe_price_id)
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from)
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_user: str = "stock_app"

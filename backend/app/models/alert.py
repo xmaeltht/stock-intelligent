@@ -52,5 +52,8 @@ class AlertEvent(Base):
         DateTime(timezone=True), server_default=func.now(), index=True
     )
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the email-dispatch step processed this event (sent, or skipped for a
+    # free user). NULL means it still needs to be considered by the worker.
+    emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     company = relationship("Company")
