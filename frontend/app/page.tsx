@@ -50,8 +50,73 @@ function greetingFor(date: Date): string {
   return "Good evening";
 }
 
+const LANDING_FEATURES: Array<{ icon: string; title: string; body: string }> = [
+  {
+    icon: "◈",
+    title: "Fair value that shows its work",
+    body: "Bear, base, and bull targets built from SEC filings and deterministic multiples — every number traces to a source, never a guess.",
+  },
+  {
+    icon: "🔔",
+    title: "Alerts that watch for you",
+    body: "Set a price or upside threshold on any security and get notified the moment it crosses — evaluated continuously in the background.",
+  },
+  {
+    icon: "◑",
+    title: "Portfolio & watchlist",
+    body: "Track holdings, factor exposure, and P&L in one place, with ratings and dividends followed over time.",
+  },
+];
+
+function LandingHero({ summary }: { summary: Summary | null }) {
+  return (
+    <section className="landing">
+      <div className="landingHero">
+        <span className="landingEyebrow">
+          <i className={`homePulse${summary && summary.market_session !== "closed" ? " open" : ""}`}>
+            <i />
+          </i>
+          {summary
+            ? `Live · ${summary.analysis_count.toLocaleString()} securities analyzed`
+            : "Deterministic research terminal"}
+        </span>
+        <h1 className="landingTitle">
+          Stock research that <span>shows its work.</span>
+        </h1>
+        <p className="landingLede">
+          Rules-based valuation, trend, and risk signals on thousands of securities — traced back to
+          filings and price data, not a black box. Built for long-term investors who want the
+          reasoning behind every rating.
+        </p>
+        <div className="landingCtas">
+          <Link href="/login?mode=signup&next=%2F" className="landingPrimary">
+            Create a free account
+          </Link>
+          <Link href="/discover" className="landingSecondary">
+            Browse the research →
+          </Link>
+        </div>
+        <p className="landingNote">Free forever to start · Rules-based research, not investment advice</p>
+      </div>
+      <div className="landingFeatures">
+        {LANDING_FEATURES.map((feature) => (
+          <div className="landingFeature" key={feature.title}>
+            <span className="landingFeatureIcon">{feature.icon}</span>
+            <strong>{feature.title}</strong>
+            <p>{feature.body}</p>
+          </div>
+        ))}
+      </div>
+      <div className="landingLiveHead">
+        <h2>See it live</h2>
+        <span>Real signals from the latest market scan — no account needed to look.</span>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [radar, setRadar] = useState<RadarResponse | null>(null);
   const [ideas, setIdeas] = useState<IdeasResponse | null>(null);
@@ -130,6 +195,8 @@ export default function Home() {
     <>
       <TopNav online={online} />
       <main className="shell">
+        {!authLoading && !user && <LandingHero summary={summary} />}
+        {!authLoading && user && (
         <div className="homeGreet">
           <div>
             <h1>{greeting}</h1>
@@ -154,6 +221,7 @@ export default function Home() {
             </div>
           )}
         </div>
+        )}
 
         <div className="homeGrid">
           <section className="card homeFeed">
