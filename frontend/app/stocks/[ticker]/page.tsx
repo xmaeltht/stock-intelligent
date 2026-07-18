@@ -7,20 +7,24 @@ import StockChart from "../../../components/StockChart";
 import DividendSection from "../../../components/DividendSection";
 import FactorRadar from "../../../components/FactorRadar";
 import {
+  ALERT_KIND_LABEL,
   compact,
   fetchWatchlistTickers,
   getJson,
   isFresh,
   money,
   pct,
+  postJson,
   ratingFor,
   signalClass,
   timeAgo,
   toggleWatch,
+  type AlertKind,
   type Detail,
   type HistoryPoint,
   type PricePoint,
 } from "../../../lib/api";
+import { useAuth } from "../../../lib/auth";
 
 function HistoryChart({ history }: { history: HistoryPoint[] }) {
   if (history.length < 2) {
@@ -74,8 +78,11 @@ function FiscalBars({ title, series }: { title: string; series: Array<{ fy_end: 
   );
 }
 
+const ALERT_KINDS: AlertKind[] = ["price_below", "price_above", "upside_above"];
+
 export default function StockPage({ params }: { params: Promise<{ ticker: string }> }) {
   const router = useRouter();
+  const { user } = useAuth();
   const goBack = () => {
     // Return to the exact previous view (filtered screener, watchlist, etc.).
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
@@ -93,6 +100,70 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
 
   const prevPrice = useRef<number | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Set-alert popover ──────────────────────────────────────────────────
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertKind, setAlertKind] = useState<AlertKind>("price_below");
+  const [alertValue, setAlertValue] = useState("");
+  const [alertBusy, setAlertBusy] = useState(false);
+  const [alertError, setAlertError] = useState("");
+  const [alertDone, setAlertDone] = useState(false);
+  const alertBoxRef = useRef<HTMLDivElement | null>(null);
+
+  const openAlert = () => {
+    if (!user) {
+      router.push(`/login?next=/stocks/${ticker}`);
+      return;
+    }
+    setAlertError("");
+    setAlertDone(false);
+    // Seed the value from the live price (or modeled upside) so it's one edit away.
+    const price = data ? Number(data.current_price) : NaN;
+    if (alertKind === "upside_above") setAlertValue("20");
+    else if (Number.isFinite(price)) setAlertValue(price.toFixed(2));
+    setAlertOpen(true);
+  };
+
+  const submitAlert = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAlertError("");
+    const value = Number(alertValue);
+    if (!Number.isFinite(value)) {
+      setAlertError("Enter a numeric value.");
+      return;
+    }
+    setAlertBusy(true);
+    try {
+      await postJson("/api/research/alerts", {
+        ticker: ticker.toUpperCase(),
+        kind: alertKind,
+        threshold: value,
+      });
+      setAlertDone(true);
+      setTimeout(() => setAlertOpen(false), 1400);
+    } catch (err) {
+      setAlertError(err instanceof Error ? err.message : "Could not create the alert.");
+    } finally {
+      setAlertBusy(false);
+    }
+  };
+
+  // Close the popover on outside click / Escape.
+  useEffect(() => {
+    if (!alertOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (alertBoxRef.current && !alertBoxRef.current.contains(e.target as Node)) setAlertOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAlertOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [alertOpen]);
 
   const load = useCallback(async (value: string, silent: boolean) => {
     try {
@@ -212,9 +283,67 @@ export default function StockPage({ params }: { params: Promise<{ ticker: string
             <p className="companyName">{data.company.name}</p>
           </div>
           <div style={{ display: "flex", gap: 18, alignItems: "end" }}>
-            <button className={`watchBtn${watched ? " on" : ""}`} onClick={onToggleWatch}>
-              {watched ? "★ Watching" : "☆ Watch"}
-            </button>
+            <div className="headActions">
+              <button className={`watchBtn${watched ? " on" : ""}`} onClick={onToggleWatch}>
+                {watched ? "★ Watching" : "☆ Watch"}
+              </button>
+              <div className="alertAnchor" ref={alertBoxRef}>
+                <button
+                  className={`alertBtn${alertOpen ? " on" : ""}`}
+                  onClick={() => (alertOpen ? setAlertOpen(false) : openAlert())}
+                >
+                  🔔 Set alert
+                </button>
+                {alertOpen && (
+                  <div className="alertPop" role="dialog" aria-label={`Set an alert for ${ticker.toUpperCase()}`}>
+                    {alertDone ? (
+                      <div className="alertPopDone">✓ Alert set for {ticker.toUpperCase()}</div>
+                    ) : (
+                      <form onSubmit={submitAlert}>
+                        <div className="alertPopTitle">Alert me when {ticker.toUpperCase()}…</div>
+                        <label>
+                          Condition
+                          <select
+                            value={alertKind}
+                            onChange={(e) => {
+                              const next = e.target.value as AlertKind;
+                              setAlertKind(next);
+                              const price = data ? Number(data.current_price) : NaN;
+                              if (next === "upside_above") setAlertValue("20");
+                              else if (Number.isFinite(price)) setAlertValue(price.toFixed(2));
+                            }}
+                          >
+                            {ALERT_KINDS.map((k) => (
+                              <option key={k} value={k}>{ALERT_KIND_LABEL[k]}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Value ({alertKind === "upside_above" ? "%" : "$"})
+                          <input
+                            type="number"
+                            value={alertValue}
+                            onChange={(e) => setAlertValue(e.target.value)}
+                            placeholder={alertKind === "upside_above" ? "20" : "180"}
+                            step="any"
+                            autoFocus
+                          />
+                        </label>
+                        {alertError && <div className="alertPopError">{alertError}</div>}
+                        <div className="alertPopActions">
+                          <button type="button" className="alertPopCancel" onClick={() => setAlertOpen(false)}>
+                            Cancel
+                          </button>
+                          <button type="submit" className="alertPopSave" disabled={alertBusy}>
+                            {alertBusy ? "…" : "Set alert"}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="priceBlock">
               <span>
                 <i className={`freshDot${isFresh(data.price_as_of, nowMs) ? " live" : ""}`} />
