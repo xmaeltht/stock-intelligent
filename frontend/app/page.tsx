@@ -199,7 +199,10 @@ export default function Home() {
         {!authLoading && user && (
         <div className="homeGreet">
           <div>
-            <h1>{greeting}</h1>
+            <h1>
+              {greeting}
+              {user?.display_name ? <>, <span>{user.display_name}</span></> : null}
+            </h1>
             <p>
               {summary
                 ? `${SESSION_LABEL[summary.market_session] ?? "Background scanning"} · ${summary.analysis_count.toLocaleString()} securities analyzed`
